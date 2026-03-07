@@ -4,11 +4,35 @@ import random
 import sqlite3
 import os
 from keep_alive import keep_alive
+import base64
+import requests
 
 TOKEN = os.environ["DISCORD_TOKEN"]
+GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 
 keep_alive()
 
+REPO = "Paither/discord_bot"  # zamień na swój login/repo
+
+def upload_db():
+    with open("luckydoors.db", "rb") as f:
+        content = base64.b64encode(f.read()).decode()
+
+    data = {
+        "message": "backup database",
+        "content": content
+    }
+
+    url = f"https://api.github.com/repos/{REPO}/contents/luckydoors.db"
+
+    r = requests.put(url, json=data, headers={
+        "Authorization": f"token {GITHUB_TOKEN}"
+    })
+
+    if r.status_code in [200, 201]:
+        print("✅ Baza wysłana na GitHub")
+    else:
+        print("❌ Błąd przy wysyłaniu bazy:", r.json())
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
 
 intents = discord.Intents.default()
@@ -165,3 +189,4 @@ async def drzwi(ctx, numer: int):
 
 
 bot.run(TOKEN)
+
