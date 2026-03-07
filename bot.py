@@ -21,29 +21,41 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Funkcja backupu bazy na GitHub ---
+def download_db():
+    url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
+    r = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if r.status_code == 200:
+        content = base64.b64decode(r.json()["content"])
+        with open(FILE_PATH, "wb") as f:
+            f.write(content)
+        logging.info("✅ Pobrano backup bazy")
+    else:
+        logging.warning("⚠ Nie znaleziono backupu bazy, tworzę nową")
+
 def upload_db():
-    try:
-        with open("luckydoors.db", "rb") as f:
-            content = base64.b64encode(f.read()).decode()
-        url = "https://api.github.com/repos/Paither/discord-bot/contents/luckydoors.db"
+    with open("luckydoors.db", "rb") as f:
+        content = base64.b64encode(f.read()).decode()
 
-        # Sprawdź czy plik istnieje, żeby pobrać SHA
-        r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-        sha = r_get.json()["sha"] if r_get.status_code == 200 else None
+    url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
+    
+    r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if r_get.status_code == 200:
+        sha = r_get.json()["sha"]
+    else:
+        sha = None
 
-        data = {"message": "backup database", "content": content}
-        if sha:
-            data["sha"] = sha
+    data = {"message": "backup database", "content": content}
+    if sha:
+        data["sha"] = sha
 
-        r = requests.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-        if r.status_code in [200, 201]:
-            logger.info("✅ Baza wysłana na GitHub")
-        else:
-            logger.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {r.text}")
-    except Exception as e:
-        logger.error(f"❌ Upload DB error: {e}")
+    r = requests.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if r.status_code in [200, 201]:
+        logging.info("✅ Baza wysłana do repo backupowego")
+    else:
+        logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {r.json()}")
 
 # --- Połączenie z SQLite ---
+download_db()
 conn = sqlite3.connect("luckydoors.db")
 cursor = conn.cursor()
 cursor.execute("""
@@ -167,3 +179,4 @@ async def punkty(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
