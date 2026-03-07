@@ -137,7 +137,7 @@ async def runda():
                 else:
                     wynik += f"{user.mention} — ❌ pudło ({wybor})\n"
 
-        await channel.send(wynik)
+        await channel.send(wynik, delete_after=60)
         upload_db()  # backup bazy na GitHub
 
     # nowa runda
@@ -155,7 +155,7 @@ Wpisz:
 
 ⏳ Czas: 5 minut
 """
-    )
+    , delete_after=300)
 
 @bot.command()
 async def drzwi(ctx, numer: int):
@@ -194,6 +194,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
