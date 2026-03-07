@@ -138,6 +138,12 @@ async def runda():
 
         await channel.send(wynik)
         upload_db()  # backup bazy na GitHub
+            # usuń wiadomość po 60 sekundach
+        await asyncio.sleep(60)
+        try:
+            await msg_koniec.delete()
+        except:
+            pass
 
     # nowa runda
     poprawne_drzwi = random.randint(1, 10)
@@ -157,14 +163,11 @@ Wpisz:
     )
 
     # odpinanie starej wiadomości
-    if aktualna_wiadomosc:
-        try:
-            await aktualna_wiadomosc.unpin()
-        except:
-            pass
-
-    print(f"DEBUG poprawne drzwi: {poprawne_drzwi}")
-
+await asyncio.sleep(5*60)
+try:
+    await msg_nowa.delete()
+except:
+    pass
 
 @bot.command()
 async def drzwi(ctx, numer: int):
@@ -190,5 +193,6 @@ async def drzwi(ctx, numer: int):
 
 
 bot.run(TOKEN)
+
 
 
