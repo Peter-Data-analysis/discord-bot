@@ -163,11 +163,11 @@ Wpisz:
     )
 
     # odpinanie starej wiadomości
-await asyncio.sleep(5*60)
-try:
-    await msg_nowa.delete()
-except:
-    pass
+    await asyncio.sleep(5*60)
+    try:
+        await msg_nowa.delete()
+    except:
+        pass
 
 @bot.command()
 async def drzwi(ctx, numer: int):
