@@ -34,6 +34,7 @@ def upload_db():
     else:
         print("❌ Błąd przy wysyłaniu bazy:", r.json())
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
+CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -192,7 +193,10 @@ async def drzwi(ctx, numer: int):
 
 @bot.command()
 async def punkty(ctx):
-    """Wyświetla aktualne punkty użytkownika"""
+    """Wyświetla aktualne punkty użytkownika tylko na kanale gry"""
+    if ctx.channel.name != CHANNEL_NAMEX:
+        return  # ignoruje komendę jeśli nie na odpowiednim kanale
+
     user_id = ctx.author.id
     cursor.execute("SELECT points FROM punkty WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
@@ -203,6 +207,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
