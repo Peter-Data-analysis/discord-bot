@@ -22,21 +22,29 @@ def upload_db():
     with open("luckydoors.db", "rb") as f:
         content = base64.b64encode(f.read()).decode()
 
+    url = f"https://api.github.com/repos/{REPO}/contents/luckydoors.db"
+
+    # sprawdź czy plik istnieje, żeby pobrać SHA
+    r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    if r_get.status_code == 200:
+        sha = r_get.json()["sha"]
+    else:
+        sha = None
+
     data = {
         "message": "backup database",
         "content": content
     }
+    if sha:
+        data["sha"] = sha
 
-    url = f"https://api.github.com/repos/{REPO}/contents/luckydoors.db"
-
-    r = requests.put(url, json=data, headers={
-        "Authorization": f"token {GITHUB_TOKEN}"
-    })
+    r = requests.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
 
     if r.status_code in [200, 201]:
-        logging.info("✅ Baza wysłana na GitHub")
+        logger.info("✅ Baza wysłana na GitHub")
     else:
-        logging.error("❌ Błąd przy wysyłaniu bazy:", r.json())
+        logger.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {r.json()}")
+        
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
 CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
 
@@ -198,6 +206,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
