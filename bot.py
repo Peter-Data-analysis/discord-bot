@@ -93,9 +93,9 @@ async def runda():
                 # pobierz obecne punkty z Supabase
                     existing = supabase.table("punkty").select("*").eq("user_id", user_id).execute()
                     if existing.data:
-                    supabase.table("punkty").update({"points": existing.data[0]['points'] + 10}).eq("user_id", user_id).execute()
+                        supabase.table("punkty").update({"points": existing.data[0]['points'] + 10}).eq("user_id", user_id).execute()
                     else:
-                    supabase.table("punkty").insert({"user_id": user_id, "points": 10}).execute()
+                        supabase.table("punkty").insert({"user_id": user_id, "points": 10}).execute()
     
                     wynik += f"{user.mention} — ✅ trafił ({wybor})\n"
                 else:
@@ -157,6 +157,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
