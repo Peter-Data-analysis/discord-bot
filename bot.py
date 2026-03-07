@@ -137,6 +137,7 @@ async def runda():
                     wynik += f"{user.mention} — ❌ pudło ({wybor})\n"
 
         await channel.send(wynik)
+        upload_db()  # backup bazy na GitHub
 
     # nowa runda
     poprawne_drzwi = random.randint(1, 10)
@@ -189,4 +190,5 @@ async def drzwi(ctx, numer: int):
 
 
 bot.run(TOKEN)
+
 
