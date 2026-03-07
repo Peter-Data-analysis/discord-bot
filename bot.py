@@ -190,9 +190,20 @@ async def drzwi(ctx, numer: int):
     msg = await ctx.send(f"{ctx.author.mention} wybrał drzwi **{numer}** 🚪")
     await msg.delete(delay=5)  # wiadomość znika po 5 sekundach
 
-
-
+@bot.command()
+async def punkty(ctx):
+    """Wyświetla aktualne punkty użytkownika"""
+    user_id = ctx.author.id
+    cursor.execute("SELECT points FROM punkty WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    
+    if result:
+        await ctx.send(f"{ctx.author.mention}, masz **{result[0]} punktów** 🎉")
+    else:
+        await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
+        
 bot.run(TOKEN)
+
 
 
 
