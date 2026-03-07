@@ -74,39 +74,29 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # ignoruj wiadomości bota
     if message.author.bot:
         return
 
-    # tylko nasz kanał gry
-    if message.channel.name != CHANNEL_NAME:
-        return
-
-    # tylko wiadomości zaczynające się od -drzwi
-    if message.content.startswith("-drzwi"):
-        # spróbuj wyciągnąć numer
-        try:
-            parts = message.content.split()
-            numer = int(parts[1])  # drugi element powinien być numerem
-
-            # jeśli numer jest poza zakresem
-            if numer < 1 or numer > 10:
+    # Kanał gry — tylko -drzwi
+    if message.channel.name == CHANNEL_NAME:
+        if message.content.startswith("-drzwi"):
+            try:
+                parts = message.content.split()
+                numer = int(parts[1])
+                if numer < 1 or numer > 10:
+                    await message.delete()
+                    await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 10!", delete_after=5)
+                    return
+            except (IndexError, ValueError):
                 await message.delete()
                 await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 10!", delete_after=5)
                 return
-
-        except (IndexError, ValueError):
-            # jeśli nie ma numeru lub jest coś niepoprawnego
+        else:
+            # Usuń wszystko inne w kanale gry
             await message.delete()
-            await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 10!", delete_after=5)
             return
 
-    else:
-        # jeśli wiadomość nie zaczyna się od -drzwi, usuń ją
-        await message.delete()
-        return
-
-    # pozwól przetworzyć poprawną komendę normalnie
+    # **WAŻNE:** przetwarzaj wszystkie komendy niezależnie od kanału
     await bot.process_commands(message)
 
 @tasks.loop(minutes=5)
@@ -204,6 +194,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
