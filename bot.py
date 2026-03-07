@@ -1,48 +1,24 @@
 import discord
 from discord.ext import commands, tasks
 import random
-import sqlite3
 import os
 from keep_alive import keep_alive
 import base64
 import requests
 import logging
+from supabase import create_client, Client
 
 TOKEN = os.environ["DISCORD_TOKEN"]
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+url: str = "https://db.baiogatzydwhsevnuori.supabase.co"
+key: str = "sb_secret_kShwrjSlxUreGHuoZrRUfg_M_2TR-a8"  # secret key
+supabase: Client = create_client(url, key)
 
 keep_alive()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def upload_db():
-    with open("luckydoors.db", "rb") as f:
-        content = base64.b64encode(f.read()).decode()
-
-    url = f"https://api.github.com/repos/Paither/discord-bot/contents/luckydoors.db"
-
-    # sprawdź czy plik istnieje, żeby pobrać SHA
-    r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-    if r_get.status_code == 200:
-        sha = r_get.json()["sha"]
-    else:
-        sha = None
-
-    data = {
-        "message": "backup database",
-        "content": content
-    }
-    if sha:
-        data["sha"] = sha
-
-    r = requests.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-
-    if r.status_code in [200, 201]:
-        logger.info("✅ Baza wysłana na GitHub")
-    else:
-        logger.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {r.json()}")
-        
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
 CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
 
@@ -54,18 +30,6 @@ bot = commands.Bot(command_prefix="-", intents=intents)
 poprawne_drzwi = None
 wybory = {}
 aktualna_wiadomosc = None
-
-conn = sqlite3.connect("luckydoors.db")
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS punkty (
-    user_id INTEGER PRIMARY KEY,
-    points INTEGER
-)
-""")
-
-conn.commit()
 
 @bot.event
 async def on_ready():
@@ -126,19 +90,18 @@ async def runda():
                 user = await bot.fetch_user(user_id)
 
                 if wybor == poprawne_drzwi:
-                    cursor.execute(
-                    "INSERT INTO punkty (user_id, points) VALUES (?, 10) ON CONFLICT(user_id) DO UPDATE SET points = points + 10",
-                    (user_id,)
-                    )
-
-                    conn.commit()
-                   
+                # pobierz obecne punkty z Supabase
+                    existing = supabase.table("punkty").select("*").eq("user_id", user_id).execute()
+                    if existing.data:
+                    supabase.table("punkty").update({"points": existing.data[0]['points'] + 10}).eq("user_id", user_id).execute()
+                    else:
+                    supabase.table("punkty").insert({"user_id": user_id, "points": 10}).execute()
+    
                     wynik += f"{user.mention} — ✅ trafił ({wybor})\n"
                 else:
                     wynik += f"{user.mention} — ❌ pudło ({wybor})\n"
 
         await channel.send(wynik, delete_after=60)
-        upload_db()  # backup bazy na GitHub
 
     # nowa runda
     poprawne_drzwi = random.randint(1, 10)
@@ -183,17 +146,18 @@ async def punkty(ctx):
     """Wyświetla aktualne punkty użytkownika tylko na kanale gry"""
     if ctx.channel.name != CHANNEL_NAMEX:
         return  # ignoruje komendę jeśli nie na odpowiednim kanale
-
-    user_id = ctx.author.id
-    cursor.execute("SELECT points FROM punkty WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
     
-    if result:
-        await ctx.send(f"{ctx.author.mention}, masz **{result[0]} punktów** 🎉")
+    user_id = ctx.author.id
+    result = supabase.table("punkty").select("*").eq("user_id", user_id).execute()
+    
+    if result.data:
+        points = result.data[0]["points"]
+        await ctx.send(f"{ctx.author.mention}, masz **{points} punktów** 🎉")
     else:
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
