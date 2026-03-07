@@ -6,6 +6,7 @@ import os
 from keep_alive import keep_alive
 import base64
 import requests
+import logging
 
 TOKEN = os.environ["DISCORD_TOKEN"]
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
@@ -13,6 +14,9 @@ GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 keep_alive()
 
 REPO = "Paither/discord_bot"  # zamień na swój login/repo
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def upload_db():
     with open("luckydoors.db", "rb") as f:
@@ -30,9 +34,9 @@ def upload_db():
     })
 
     if r.status_code in [200, 201]:
-        print("✅ Baza wysłana na GitHub")
+        logging.info("✅ Baza wysłana na GitHub")
     else:
-        print("❌ Błąd przy wysyłaniu bazy:", r.json())
+        logging.info("❌ Błąd przy wysyłaniu bazy:", r.json())
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
 CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
 
@@ -194,6 +198,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
