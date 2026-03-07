@@ -13,7 +13,7 @@ GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 
 keep_alive()
 
-REPO = "Paither/discord_bot"  # zamień na swój login/repo
+REPO = "Paither/discord-bot"  # zamień na swój login/repo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -206,6 +206,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
