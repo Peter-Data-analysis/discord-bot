@@ -139,12 +139,6 @@ async def runda():
 
         await channel.send(wynik)
         upload_db()  # backup bazy na GitHub
-            # usuń wiadomość po 60 sekundach
-        await asyncio.sleep(60)
-        try:
-            await msg_koniec.delete()
-        except:
-            pass
 
     # nowa runda
     poprawne_drzwi = random.randint(1, 10)
@@ -162,13 +156,6 @@ Wpisz:
 ⏳ Czas: 5 minut
 """
     )
-
-    # odpinanie starej wiadomości
-    await asyncio.sleep(5*60)
-    try:
-        await msg_nowa.delete()
-    except:
-        pass
 
 @bot.command()
 async def drzwi(ctx, numer: int):
@@ -207,6 +194,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
