@@ -36,7 +36,7 @@ def upload_db():
     if r.status_code in [200, 201]:
         logging.info("✅ Baza wysłana na GitHub")
     else:
-        logging.info("❌ Błąd przy wysyłaniu bazy:", r.json())
+        logging.error("❌ Błąd przy wysyłaniu bazy:", r.json())
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
 CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
 
@@ -63,7 +63,7 @@ conn.commit()
 
 @bot.event
 async def on_ready():
-    print(f"✅ Bot działa jako {bot.user}!")
+    logging.info(f"✅ Bot działa jako {bot.user}!")
     runda.start()
 
 @bot.event
@@ -198,6 +198,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
