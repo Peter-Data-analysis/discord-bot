@@ -13,8 +13,6 @@ GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 
 keep_alive()
 
-REPO = "Paither/discord-bot"  # zamień na swój login/repo
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -22,7 +20,7 @@ def upload_db():
     with open("luckydoors.db", "rb") as f:
         content = base64.b64encode(f.read()).decode()
 
-    url = f"https://api.github.com/repos/{REPO}/contents/luckydoors.db"
+    url = f"https://api.github.com/repos/Paither/discord-bot/contents/luckydoors.db"
 
     # sprawdź czy plik istnieje, żeby pobrać SHA
     r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
@@ -206,6 +204,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
         
 bot.run(TOKEN)
+
 
 
 
