@@ -4,10 +4,8 @@ import random
 import sqlite3
 import os
 from keep_alive import keep_alive
-from dotenv import load_dotenv
 
-load_dotenv()  # wczytuje plik .env
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.environ["DISCORD_TOKEN"]
 
 keep_alive()
 
@@ -163,6 +161,7 @@ async def drzwi(ctx, numer: int):
 
     msg = await ctx.send(f"{ctx.author.mention} wybrał drzwi **{numer}** 🚪")
     await msg.delete(delay=5)  # wiadomość znika po 5 sekundach
+
 
 
 bot.run(TOKEN)
