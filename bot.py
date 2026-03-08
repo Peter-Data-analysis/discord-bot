@@ -255,46 +255,9 @@ async def top(ctx):
     )
     top_all = cursor.fetchall()
 
-@bot.command()
-@commands.has_role("administrator")
-async def zmień(ctx):
-    """Przenosi punkty z kolumny points do alltime_points i usuwa kolumnę points"""
-    cursor.execute("PRAGMA table_info(punkty)")
-    kolumny = [kol[1] for kol in cursor.fetchall()]
-
-    if "points" not in kolumny:
-        await ctx.send("❌ Kolumna 'points' już nie istnieje!")
-        return
-
-    # 1️⃣ Dodaj kolumnę alltime_points jeśli nie istnieje
-    if "alltime_points" not in kolumny:
-        cursor.execute("ALTER TABLE punkty ADD COLUMN alltime_points INTEGER DEFAULT 0")
-        conn.commit()
-
-    # 2️⃣ Przenieś wartości z points do alltime_points
-    cursor.execute("UPDATE punkty SET alltime_points = points")
-    conn.commit()
-
-    # 3️⃣ Usunięcie kolumny points (SQLite wymaga tymczasowej tabeli)
-    cursor.execute("""
-    CREATE TABLE punkty_tmp (
-        user_id INTEGER PRIMARY KEY,
-        week_points INTEGER DEFAULT 0,
-        alltime_points INTEGER DEFAULT 0
-    )
-    """)
-    cursor.execute("""
-    INSERT INTO punkty_tmp (user_id, week_points, alltime_points)
-    SELECT user_id, week_points, alltime_points FROM punkty
-    """)
-    cursor.execute("DROP TABLE punkty")
-    cursor.execute("ALTER TABLE punkty_tmp RENAME TO punkty")
-    conn.commit()
-
-    await ctx.send("✅ Punkty zostały przeniesione do 'alltime_points' i kolumna 'points' została usunięta.")
-
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
