@@ -7,6 +7,7 @@ from keep_alive import keep_alive
 import base64
 import requests
 import logging
+from datetime import datetime, timezone
 
 # --- Konfiguracja ---
 TOKEN = os.environ["DISCORD_TOKEN"]
@@ -268,9 +269,32 @@ async def top(ctx):
             msg += f"**{i}.** <@{user_id}> — {points} pkt\n"
 
     await ctx.send(msg)
+
+@bot.command()
+async def czas_ranking(ctx):
+    """Pokazuje, za ile czasu rozpocznie się kolejny ranking tygodniowy"""
+    if not tygodniowy_ranking.is_running():
+        await ctx.send("⏳ Ranking tygodniowy nie jest uruchomiony.")
+        return
+
+    # next_iteration to datetime w UTC
+    next_time = tygodniowy_ranking.next_iteration
+
+    # aktualny czas w UTC
+    now = datetime.now(timezone.utc)
+
+    # różnica czasu
+    delta = next_time - now
+
+    # format w godzinach, minutach, sekundach
+    hours, remainder = divmod(int(delta.total_seconds()), 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    await ctx.send(f"⏰ Kolejny ranking tygodniowy rozpocznie się za {hours}h {minutes}m {seconds}s.")
     
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
