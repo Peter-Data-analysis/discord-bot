@@ -157,6 +157,7 @@ async def runda():
     wybory = {}
 
     if bonusowa_runda:
+        logging.info("✅ Wystapila bonusowa runda!")
         tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
 
 💰 **BONUSOWA RUNDA!**
@@ -211,6 +212,7 @@ async def punkty(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
