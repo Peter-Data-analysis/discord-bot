@@ -249,13 +249,29 @@ async def punkty(ctx):
 @bot.command()
 @commands.has_role("Administrator")
 async def top(ctx):
+    """Wyświetla ranking all-time TOP 20 graczy"""
     cursor.execute(
         "SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20"
     )
     top_all = cursor.fetchall()
 
+    if not top_all:
+        await ctx.send("📊 Brak danych do rankingu all-time.")
+        return
+
+    msg = "🏆 **TOP 20 GRACZY ALL-TIME - LUCKY DOORS**\n\n"
+    for i, (user_id, points) in enumerate(top_all, start=1):
+        try:
+            user = await bot.fetch_user(user_id)
+            msg += f"**{i}.** {user.name} — {points} pkt\n"
+        except:
+            msg += f"**{i}.** <@{user_id}> — {points} pkt\n"
+
+    await ctx.send(msg)
+    
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
