@@ -233,19 +233,20 @@ async def drzwi(ctx, numer: int):
     msg = await ctx.send(f"{ctx.author.mention} wybrał drzwi **{numer}** 🚪")
     await msg.delete(delay=5)
 
-# --- Komenda -punkty ---
+# --- Komenda -punkty (zmieniona) ---
 @bot.command()
 async def punkty(ctx):
     if ctx.channel.name != CHANNEL_NAMEX:
         return
     user_id = ctx.author.id
-    cursor.execute("SELECT points FROM punkty WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
     if result:
-        await ctx.send(f"{ctx.author.mention}, masz **{result[0]} punktów** 🎉")
+        week, alltime = result
+        await ctx.send(f"{ctx.author.mention}, masz **{week} punktów tygodniowych** i **{alltime} punktów all-time** 🎉")
     else:
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
-        
+
 @bot.command()
 @commands.has_role("administrator")
 async def top(ctx):
@@ -294,6 +295,7 @@ async def zmień(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
