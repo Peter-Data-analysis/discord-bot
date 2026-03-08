@@ -109,6 +109,17 @@ async def on_message(message):
             return
 
     await bot.process_commands(message)
+    
+# --- Event: usuwanie użytkownika z bazy danych po wyjściu z serwera ---
+@bot.event
+async def on_member_remove(member):
+    user_id = member.id
+
+    cursor.execute("DELETE FROM punkty WHERE user_id = ?", (user_id,))
+    conn.commit()
+
+    logger.info(f"🗑 Usunięto punkty użytkownika {member.name} ({user_id}) z bazy")
+
 
 # --- Pętla rundy ---
 @tasks.loop(minutes=5)
@@ -250,7 +261,6 @@ async def punkty(ctx):
 @bot.command()
 @commands.has_role("Administrator")
 async def top(ctx):
-    """Wyświetla ranking all-time TOP 20 graczy"""
     cursor.execute(
         "SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20"
     )
@@ -261,12 +271,16 @@ async def top(ctx):
         return
 
     msg = "🏆 **TOP 20 GRACZY ALL-TIME - LUCKY DOORS**\n\n"
+
     for i, (user_id, points) in enumerate(top_all, start=1):
-        try:
-            user = await bot.fetch_user(user_id)
-            msg += f"**{i}.** {user.name} — {points} pkt\n"
-        except:
-            msg += f"**{i}.** <@{user_id}> — {points} pkt\n"
+        member = ctx.guild.get_member(user_id)
+
+        if member:
+            name = member.display_name   # nick z serwera (z dużymi literami)
+        else:
+            name = f"<@{user_id}>"
+
+        msg += f"**{i}.** {name} — {points} pkt\n"
 
     await ctx.send(msg)
 
@@ -294,6 +308,7 @@ async def czas_ranking(ctx):
     
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
