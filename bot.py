@@ -109,44 +109,76 @@ async def on_message(message):
 @tasks.loop(minutes=5)
 async def runda():
     global poprawne_drzwi, wybory
+    global bonusowa_runda
 
     channel = discord.utils.get(bot.get_all_channels(), name=CHANNEL_NAME)
     if channel is None:
         logger.warning("Nie znaleziono kanału")
         return
 
-    # Zakończenie poprzedniej rundy
+    # --- Zakończenie poprzedniej rundy ---
     if poprawne_drzwi is not None:
         wynik = f"🎮 **KONIEC RUNDY**\n\nPoprawne drzwi: **{poprawne_drzwi}**\n\n"
+
         if not wybory:
             wynik += "Nikt nie wybrał drzwi."
         else:
             for user_id, wybor in wybory.items():
                 user = await bot.fetch_user(user_id)
+
                 if wybor == poprawne_drzwi:
+
+                    punkty = 5 if bonusowa_runda else 1
+
                     cursor.execute(
-                        "INSERT INTO punkty (user_id, points) VALUES (?, 10) "
-                        "ON CONFLICT(user_id) DO UPDATE SET points = points + 10",
-                        (user_id,)
+                        "INSERT INTO punkty (user_id, points) VALUES (?, ?) "
+                        "ON CONFLICT(user_id) DO UPDATE SET points = points + ?",
+                        (user_id, punkty, punkty)
                     )
+
                     conn.commit()
-                    wynik += f"{user.mention} — ✅ trafił ({wybor})\n"
+
+                    if bonusowa_runda:
+                        wynik += f"{user.mention} — 💰 BONUS! (+5 pkt)\n"
+                    else:
+                        wynik += f"{user.mention} — ✅ trafił ({wybor}) (+1 pkt)\n"
+
                 else:
                     wynik += f"{user.mention} — ❌ pudło ({wybor})\n"
-                    
-        await channel.send(wynik, delete_after=60)
-        upload_db()  # backup po rundzie
 
-    # Nowa runda
+        await channel.send(wynik, delete_after=60)
+        upload_db()
+
+    # --- LOSOWANIE BONUSOWEJ RUNDY ---
+    bonusowa_runda = random.random() < 0.05
+
+    # --- Nowa runda ---
     poprawne_drzwi = random.randint(1, 10)
     wybory = {}
-    await channel.send(
-        """🎮 **NOWA RUNDA LUCKY DOORS**
+
+    if bonusowa_runda:
+        tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
+
+💰 **BONUSOWA RUNDA!**
+Za poprawne drzwi dostajesz **5 punktów**
+
 🚪 Wybierz drzwi **1-10**
+
 Wpisz:
 `-drzwi numer`
+
 ⏳ Czas: 5 minut"""
-    , delete_after=299)
+    else:
+        tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
+
+🚪 Wybierz drzwi **1-10**
+
+Wpisz:
+`-drzwi numer`
+
+⏳ Czas: 5 minut"""
+
+    await channel.send(tekst, delete_after=299)
 
 # --- Komenda -drzwi ---
 @bot.command()
@@ -179,6 +211,7 @@ async def punkty(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
