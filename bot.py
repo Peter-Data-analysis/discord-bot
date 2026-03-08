@@ -61,7 +61,8 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS punkty (
     user_id INTEGER PRIMARY KEY,
-    points INTEGER
+    week_points INTEGER DEFAULT 0,
+    alltime_points INTEGER DEFAULT 0
 )
 """)
 conn.commit()
@@ -77,8 +78,12 @@ wybory = {}
 # --- Event: bot ready ---
 @bot.event
 async def on_ready():
-    logger.info(f"✅ Bot działa jako {bot.user}!")
-    runda.start()
+    print(f"Zalogowano jako {bot.user}")
+
+    if not runda.is_running():
+        runda.start()
+    if not tygodniowy_ranking.is_running():
+        tygodniowy_ranking.start()
 
 # --- Event: filtrowanie wiadomości ---
 @bot.event
@@ -130,11 +135,13 @@ async def runda():
 
                     punkty = 5 if bonusowa_runda else 1
 
-                    cursor.execute(
-                        "INSERT INTO punkty (user_id, points) VALUES (?, ?) "
-                        "ON CONFLICT(user_id) DO UPDATE SET points = points + ?",
-                        (user_id, punkty, punkty)
-                    )
+                    # Dodanie punktów do obu kolumn
+                    cursor.execute("""
+                        INSERT INTO punkty (user_id, week_points, alltime_points) VALUES (?, ?, ?)
+                        ON CONFLICT(user_id) DO UPDATE SET 
+                        week_points = week_points + ?, 
+                        alltime_points = alltime_points + ?
+                        """, (user_id, punkty, punkty, punkty, punkty))
 
                     conn.commit()
 
@@ -150,7 +157,7 @@ async def runda():
         upload_db()
 
     # --- LOSOWANIE BONUSOWEJ RUNDY ---
-    bonusowa_runda = random.random() < 0.05
+    bonusowa_runda = random.random() < 0.03
 
     # --- Nowa runda ---
     poprawne_drzwi = random.randint(1, 10)
@@ -180,7 +187,36 @@ Wpisz:
 ⏳ Czas: 5 minut"""
 
     await channel.send(tekst, delete_after=299)
+    
+@tasks.loop(hours=168)
+async def tygodniowy_ranking():
+    channel = discord.utils.get(bot.get_all_channels(), name="ogloszenia")
 
+    if channel is None:
+        logger.warning("Nie znaleziono kanału ogłoszeń")
+        return
+
+    cursor.execute(
+        "SELECT user_id, week_points FROM punkty ORDER BY week_points DESC LIMIT 10"
+    )
+
+    top = cursor.fetchall()
+
+    if not top:
+        await channel.send("📊 Brak danych do rankingu.")
+        return
+
+    msg = "🏆 **TOP 10 GRACZY TYGODNIA - LUCKY DOORS**\n\n"
+
+    for i, (user_id, points) in enumerate(top, start=1):
+        user = await bot.fetch_user(user_id)
+        msg += f"**{i}.** {user.name} — {points} pkt\n"
+
+    await channel.send(msg)
+    cursor.execute("UPDATE punkty SET week_points = 0")
+    conn.commit()
+    upload_db()
+    
 # --- Komenda -drzwi ---
 @bot.command()
 async def drzwi(ctx, numer: int):
@@ -209,9 +245,56 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, masz **{result[0]} punktów** 🎉")
     else:
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
+        
+@bot.command()
+@commands.has_role("administrator")
+async def top(ctx):
+    cursor.execute(
+        "SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20"
+    )
+    top_all = cursor.fetchall()
+
+@bot.command()
+@commands.has_role("administrator")
+async def zmień(ctx):
+    """Przenosi punkty z kolumny points do alltime_points i usuwa kolumnę points"""
+    cursor.execute("PRAGMA table_info(punkty)")
+    kolumny = [kol[1] for kol in cursor.fetchall()]
+
+    if "points" not in kolumny:
+        await ctx.send("❌ Kolumna 'points' już nie istnieje!")
+        return
+
+    # 1️⃣ Dodaj kolumnę alltime_points jeśli nie istnieje
+    if "alltime_points" not in kolumny:
+        cursor.execute("ALTER TABLE punkty ADD COLUMN alltime_points INTEGER DEFAULT 0")
+        conn.commit()
+
+    # 2️⃣ Przenieś wartości z points do alltime_points
+    cursor.execute("UPDATE punkty SET alltime_points = points")
+    conn.commit()
+
+    # 3️⃣ Usunięcie kolumny points (SQLite wymaga tymczasowej tabeli)
+    cursor.execute("""
+    CREATE TABLE punkty_tmp (
+        user_id INTEGER PRIMARY KEY,
+        week_points INTEGER DEFAULT 0,
+        alltime_points INTEGER DEFAULT 0
+    )
+    """)
+    cursor.execute("""
+    INSERT INTO punkty_tmp (user_id, week_points, alltime_points)
+    SELECT user_id, week_points, alltime_points FROM punkty
+    """)
+    cursor.execute("DROP TABLE punkty")
+    cursor.execute("ALTER TABLE punkty_tmp RENAME TO punkty")
+    conn.commit()
+
+    await ctx.send("✅ Punkty zostały przeniesione do 'alltime_points' i kolumna 'points' została usunięta.")
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
