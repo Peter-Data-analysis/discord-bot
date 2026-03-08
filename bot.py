@@ -58,13 +58,12 @@ def upload_db():
 download_db()
 conn = sqlite3.connect("luckydoors.db")
 cursor = conn.cursor()
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS punkty (
-    user_id INTEGER PRIMARY KEY,
-    week_points INTEGER DEFAULT 0,
-    alltime_points INTEGER DEFAULT 0
-)
-""")
+cursor.execute("PRAGMA table_info(punkty)")
+kolumny = [kol[1] for kol in cursor.fetchall()]
+if "week_points" not in kolumny:
+    cursor.execute("ALTER TABLE punkty ADD COLUMN week_points INTEGER DEFAULT 0")
+if "alltime_points" not in kolumny:
+    cursor.execute("ALTER TABLE punkty ADD COLUMN alltime_points INTEGER DEFAULT 0")
 conn.commit()
 
 # --- Bot ---
@@ -257,6 +256,7 @@ async def top(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
