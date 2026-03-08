@@ -133,8 +133,8 @@ async def runda():
                     wynik += f"{user.mention} — ✅ trafił ({wybor})\n"
                 else:
                     wynik += f"{user.mention} — ❌ pudło ({wybor})\n"
-
-        await channel.send(wynik)
+                    
+        await channel.send(wynik, delete_after=60)
         upload_db()  # backup po rundzie
 
     # Nowa runda
@@ -146,7 +146,7 @@ async def runda():
 Wpisz:
 `-drzwi numer`
 ⏳ Czas: 5 minut"""
-    )
+    , delete_after=299)
 
 # --- Komenda -drzwi ---
 @bot.command()
@@ -179,5 +179,6 @@ async def punkty(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
