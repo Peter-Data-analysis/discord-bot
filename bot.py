@@ -26,7 +26,7 @@ def download_db():
     r = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
     if r.status_code == 200:
         content = base64.b64decode(r.json()["content"])
-        with open(FILE_PATH, "wb") as f:
+        with open("luckydoors.db", "wb") as f:
             f.write(content)
         logging.info("✅ Pobrano backup bazy")
     else:
@@ -179,4 +179,5 @@ async def punkty(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
