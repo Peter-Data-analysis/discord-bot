@@ -190,7 +190,7 @@ Wpisz:
     
 @tasks.loop(hours=168)
 async def tygodniowy_ranking():
-    channel = discord.utils.get(bot.get_all_channels(), name="ogloszenia")
+    channel = discord.utils.get(bot.get_all_channels(), name="❰❰📣❱❱-ogłoszenia")
 
     if channel is None:
         logger.warning("Nie znaleziono kanału ogłoszeń")
@@ -295,6 +295,7 @@ async def zmień(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
