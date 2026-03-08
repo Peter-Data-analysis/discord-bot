@@ -248,7 +248,7 @@ async def punkty(ctx):
         await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
 
 @bot.command()
-@commands.has_role("administrator")
+@commands.has_role("Administrator")
 async def top(ctx):
     cursor.execute(
         "SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20"
@@ -257,6 +257,7 @@ async def top(ctx):
 
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
