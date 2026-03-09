@@ -106,13 +106,13 @@ async def on_message(message):
         if message.content.startswith("-drzwi"):
             try:
                 numer = int(message.content.split()[1])
-                if numer < 1 or numer > 10:
+                if numer < 1 or numer > 5:
                     await message.delete()
-                    await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 10!", delete_after=5)
+                    await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 5!", delete_after=5)
                     return
             except (IndexError, ValueError):
                 await message.delete()
-                await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 10!", delete_after=5)
+                await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 5!", delete_after=5)
                 return
         else:
             await message.delete()
@@ -197,7 +197,7 @@ async def runda():
         bonusowa_runda = random.random() < 0.03
 
     # --- Nowa runda ---
-    poprawne_drzwi = random.randint(1, 10)
+    poprawne_drzwi = random.randint(1, 5)
     wybory = {}
 
     if bonusowa_runda:
@@ -207,7 +207,7 @@ async def runda():
 💰 **BONUSOWA RUNDA!**
 Za poprawne drzwi dostajesz **5 punktów**
 
-🚪 Wybierz drzwi **1-10**
+🚪 Wybierz drzwi **1-5**
 
 Wpisz:
 `-drzwi numer`
@@ -221,7 +221,7 @@ Wpisz:
 💰💰💰 **JACKPOT RUNDA!**
 Za poprawne drzwi dostajesz **15 punktów**!!!
 
-🚪 Wybierz drzwi **1-10**
+🚪 Wybierz drzwi **1-5**
 
 Wpisz:
 `-drzwi numer`
@@ -231,7 +231,7 @@ Wpisz:
     else:
         tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
 
-🚪 Wybierz drzwi **1-10**
+🚪 Wybierz drzwi **1-5**
 
 Wpisz:
 `-drzwi numer`
@@ -286,8 +286,8 @@ async def drzwi(ctx, numer: int):
     await ctx.message.delete()
     if ctx.channel.name != CHANNEL_NAME:
         return
-    if numer < 1 or numer > 10:
-        await ctx.send("❌ Wybierz drzwi od 1 do 10!")
+    if numer < 1 or numer > 5:
+        await ctx.send("❌ Wybierz drzwi od 1 do 5!")
         return
     if ctx.author.id in wybory:
         await ctx.send("❌ Już wybrałeś drzwi w tej rundzie!")
@@ -362,6 +362,7 @@ async def czas_ranking(ctx):
     
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
