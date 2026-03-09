@@ -360,8 +360,57 @@ async def czas_ranking(ctx):
 
     await ctx.send(f"⏰ Kolejny ranking tygodniowy rozpocznie się za {hours}h {minutes}m {seconds}s.")
     
+# --- Komenda administracyjna: dodaj punkty ---
+@bot.command()
+@commands.has_role("Administrator")
+async def punkty_dodaj(ctx, member: discord.Member, ilosc: int):
+    if ilosc <= 0:
+        await ctx.send("❌ Podaj dodatnią liczbę punktów!")
+        return
+    async with db_lock:
+        cursor.execute("""
+            INSERT INTO punkty (user_id, week_points, alltime_points)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+            week_points = week_points + ?,
+            alltime_points = alltime_points + ?
+        """, (member.id, ilosc, ilosc, ilosc, ilosc))
+        conn.commit()
+    await ctx.send(f"✅ Dodano {ilosc} punktów użytkownikowi {member.mention}.")
+
+# --- Komenda administracyjna: usuń punkty ---
+@bot.command()
+@commands.has_role("Administrator")
+async def punkty_usun(ctx, member: discord.Member, ilosc: int):
+    if ilosc <= 0:
+        await ctx.send("❌ Podaj dodatnią liczbę punktów!")
+        return
+    async with db_lock:
+        cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (member.id,))
+        result = cursor.fetchone()
+        if result:
+            week, alltime = result
+            new_week = max(week - ilosc, 0)
+            new_alltime = max(alltime - ilosc, 0)
+            cursor.execute("""
+                UPDATE punkty SET week_points = ?, alltime_points = ? WHERE user_id = ?
+            """, (new_week, new_alltime, member.id))
+            conn.commit()
+            await ctx.send(f"✅ Usunięto {ilosc} punktów użytkownikowi {member.mention}.")
+        else:
+            await ctx.send(f"❌ Użytkownik {member.mention} nie ma punktów w bazie.")
+
+# --- Komenda administracyjna: usuń dane użytkownika ---
+@bot.command()
+@commands.has_role("Administrator")
+async def data_usun(ctx, member: discord.Member):
+    async with db_lock:
+        cursor.execute("DELETE FROM punkty WHERE user_id = ?", (member.id,))
+        conn.commit()
+    await ctx.send(f"🗑 Dane użytkownika {member.mention} zostały usunięte z bazy.")
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
