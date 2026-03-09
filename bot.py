@@ -23,6 +23,7 @@ db_lock = asyncio.Lock()
 keep_alive()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+stop_runda = False
 
 # --- Funkcja backupu bazy na GitHub ---
 def download_db():
@@ -136,7 +137,8 @@ async def runda():
     global poprawne_drzwi, wybory
     global bonusowa_runda
     global jackpot_runda
-
+    if stop_runda:
+        return  # nic nie robimy, runda nie startuje
     channel = discord.utils.get(bot.get_all_channels(), name=CHANNEL_NAME)
     if channel is None:
         logger.warning("Nie znaleziono kanału")
@@ -286,15 +288,19 @@ async def drzwi(ctx, numer: int):
     await ctx.message.delete()
     if ctx.channel.name != CHANNEL_NAME:
         return
-    if numer < 1 or numer > 5:
-        await ctx.send("❌ Wybierz drzwi od 1 do 5!")
+    # --- sprawdzamy, czy gra nie jest wstrzymana ---
+    global stop_runda
+    if stop_runda:
+        msg = await ctx.send("⏸ Gra została wstrzymana!", delete_after=5)
         return
-    if ctx.author.id in wybory:
-        await ctx.send("❌ Już wybrałeś drzwi w tej rundzie!")
+    elif numer < 1 or numer > 5:
+        await ctx.send("❌ Wybierz drzwi od 1 do 5!", delete_after=5)
+        return
+    elif ctx.author.id in wybory:
+        await ctx.send("❌ Już wybrałeś drzwi w tej rundzie!", delete_after=5)
         return
     wybory[ctx.author.id] = numer
-    msg = await ctx.send(f"{ctx.author.mention} wybrał drzwi **{numer}** 🚪")
-    await msg.delete(delay=5)
+    msg = await ctx.send(f"{ctx.author.mention} wybrał drzwi **{numer}** 🚪", delete_after=5)
 
 # --- Komenda -punkty (zmieniona) ---
 @bot.command()
@@ -435,7 +441,7 @@ async def punkty_pokaz(ctx, member: discord.Member):
 @commands.has_role("Administrator")
 async def runda_stop(ctx):
     """Kończy aktualną rundę i blokuje kolejne."""
-    global stop_runda, poprawne_drzwi, wybory
+    global stop_runda
     stop_runda = True
     # pobranie kanału gry po nazwie
     channel = discord.utils.get(ctx.guild.text_channels, name=CHANNEL_NAME)
@@ -445,13 +451,16 @@ async def runda_stop(ctx):
 @bot.command()
 @commands.has_role("Administrator")
 async def runda_start(ctx):
-    if not runda.is_running():
-        runda.start()
-        await ctx.send("▶️ Runda została wznowiona.")
+    global stop_runda
+    if stop_runda:
+        stop_runda = False
+        await ctx.send("▶️ Runda została wznowiona. Można znów wybierać drzwi!")
     else:
-        await ctx.send("❌ Runda już działa.")
+        await ctx.send("❌ Gra już działa.")
+        
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
