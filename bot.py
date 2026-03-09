@@ -82,8 +82,10 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="-", intents=intents)
 
 poprawne_drzwi = None
+pulapka_drzwi = None
 wybory = {}
 bonusowa_runda = False
+pulapka_runda= False
 jackpot_runda = False
 
 # --- Event: bot ready ---
@@ -134,7 +136,8 @@ async def on_member_remove(member):
 # --- Pętla rundy ---
 @tasks.loop(minutes=5)
 async def runda():
-    global poprawne_drzwi, wybory
+    global poprawne_drzwi, wybory, pulapka_drzwi
+    global pulapka_runda
     global bonusowa_runda
     global jackpot_runda
     if stop_runda:
@@ -169,6 +172,7 @@ async def runda():
                         else:
                             punkty = 1
 
+
                         # Dodanie punktów do obu kolumn
                         cursor.execute("""
                             INSERT INTO punkty (user_id, week_points, alltime_points)
@@ -183,10 +187,20 @@ async def runda():
                         elif bonusowa_runda:
                             wynik += f"{user_mention} — 💰 BONUS! (+5 pkt)\n"
                         else:
-                            wynik += f"{user_mention} — ✅ trafił ({wybor}) (+1 pkt)\n"
-
+                            wynik += f"{user_mention} — ✅ trafił (+1 pkt)\n"
+                            
+                    elif pulapka_runda and wybor == pulapka_drzwi:
+                        punkty = 1
+                        cursor.execute("""
+                            INSERT INTO punkty (user_id, week_points, alltime_points)
+                            VALUES (?, ?, ?)
+                            ON CONFLICT(user_id) DO UPDATE SET
+                            week_points = week_points - ?,
+                            alltime_points = alltime_points - ?
+                            """, (user_id, punkty, punkty, punkty, punkty))
+                        wynik += f"{user_mention} — ☠️ PUŁAPKA. (-1 pkt)\n"
                     else:
-                        wynik += f"{user_mention} — ❌ pudło ({wybor})\n"
+                        wynik += f"{user_mention} — ❌ pudło\n"
             conn.commit()
         await channel.send(wynik, delete_after=60)
         upload_db()
@@ -194,20 +208,27 @@ async def runda():
     # --- Losowanie rundy ---
     jackpot_runda = random.random() < 0.005
     bonusowa_runda = False
-
     if not jackpot_runda:
-        bonusowa_runda = random.random() < 0.03
+        bonusowa_runda = random.random() < 0.05
+    pulapka_runda = random.random() < 0.2
+    
 
     # --- Nowa runda ---
     poprawne_drzwi = random.randint(1, 5)
+    if pulapka_runda:
+        pulapka_drzwi = random.randint(1, 5)
+        while pulapka_drzwi == poprawne_drzwi:
+            pulapka_drzwi = random.randint(1, 5)
+    elif not pulapka_runda:
+        pulapka_drzwi = None
+    
     wybory = {}
 
     if bonusowa_runda:
         logging.info("✅ Wystąpiła bonusowa runda!")
         tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
 
-💰 **BONUSOWA RUNDA!**
-Za poprawne drzwi dostajesz **5 punktów**
+Wyczuwam jakieś bonusy 💰...
 
 🚪 Wybierz drzwi **1-5**
 
@@ -220,8 +241,7 @@ Wpisz:
         logging.info("✅ Wystąpiła runda Jackpot!")
         tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
 
-💰💰💰 **JACKPOT RUNDA!**
-Za poprawne drzwi dostajesz **15 punktów**!!!
+Szykuje się ostre zarabianie 💰💰💰...
 
 🚪 Wybierz drzwi **1-5**
 
@@ -233,6 +253,8 @@ Wpisz:
     else:
         tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
 
+Nic ciekawego...
+
 🚪 Wybierz drzwi **1-5**
 
 Wpisz:
@@ -241,6 +263,8 @@ Wpisz:
 ⏳ Czas: 5 minut"""
 
     await channel.send(tekst, delete_after=299)
+    if pulapka_runda:
+        await channel.send("""🪤 Czuję również jakieś niebezpieczeństwo... Bądź ostrożny!""", delete_after=299)
     
 @tasks.loop(time=time(hour=23, minute=59, tzinfo=ZoneInfo("Europe/Warsaw")))
 async def tygodniowy_ranking():
@@ -468,6 +492,7 @@ async def runda_start(ctx):
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
