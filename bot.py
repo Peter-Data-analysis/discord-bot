@@ -447,7 +447,7 @@ async def runda_stop(ctx):
     if channel:
         stop_msg = await channel.send("⏹ Aktualna runda została zatrzymana. Kolejne rundy nie będą się rozpoczynać")
 
-@@bot.command()
+@bot.command()
 @commands.has_role("Administrator")
 async def runda_start(ctx):
     global stop_runda, stop_msg
@@ -468,6 +468,7 @@ async def runda_start(ctx):
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
