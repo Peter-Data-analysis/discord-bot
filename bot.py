@@ -408,8 +408,49 @@ async def data_usun(ctx, member: discord.Member):
         cursor.execute("DELETE FROM punkty WHERE user_id = ?", (member.id,))
         conn.commit()
     await ctx.send(f"🗑 Dane użytkownika {member.mention} zostały usunięte z bazy.")
+
+# --- Komenda administracyjna: zresetuj punkty ---
+@bot.command()
+@commands.has_role("Administrator")
+async def punkty_reset(ctx):
+    async with db_lock:
+        cursor.execute("UPDATE punkty SET week_points = 0")
+        conn.commit()
+    await ctx.send("♻️ Punkty tygodniowe wszystkich użytkowników zostały zresetowane.")
+    
+# --- Komenda administracyjna: pokaż punkty użytkownika ---
+@bot.command()
+@commands.has_role("Administrator")
+async def punkty_pokaz(ctx, member: discord.Member):
+    async with db_lock:
+        cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (member.id,))
+        result = cursor.fetchone()
+    if result:
+        week, alltime = result
+        await ctx.send(f"{member_mention} ma **{week} punktów tygodniowych** i **{alltime} punktów all-time**.")
+    else:
+        await ctx.send(f"{member_mention} nie ma punktów w bazie.")
+
+@bot.command()
+@commands.has_role("Administrator")
+async def runda_stop(ctx):
+    if runda.is_running():
+        runda.stop()
+        await ctx.send("⏸ Runda została zatrzymana.")
+    else:
+        await ctx.send("❌ Runda nie jest uruchomiona.")
+
+@bot.command()
+@commands.has_role("Administrator")
+async def runda_start(ctx):
+    if not runda.is_running():
+        runda.start()
+        await ctx.send("▶️ Runda została wznowiona.")
+    else:
+        await ctx.send("❌ Runda już działa.")
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
