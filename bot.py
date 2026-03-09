@@ -427,9 +427,9 @@ async def punkty_pokaz(ctx, member: discord.Member):
         result = cursor.fetchone()
     if result:
         week, alltime = result
-        await ctx.send(f"{member_mention} ma **{week} punktów tygodniowych** i **{alltime} punktów all-time**.")
+        await ctx.send(f"{member.mention} ma **{week} punktów tygodniowych** i **{alltime} punktów all-time**.")
     else:
-        await ctx.send(f"{member_mention} nie ma punktów w bazie.")
+        await ctx.send(f"{member.mention} nie ma punktów w bazie.")
 
 @bot.command()
 @commands.has_role("Administrator")
@@ -450,6 +450,7 @@ async def runda_start(ctx):
         await ctx.send("❌ Runda już działa.")
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
