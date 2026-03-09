@@ -434,12 +434,14 @@ async def punkty_pokaz(ctx, member: discord.Member):
 @bot.command()
 @commands.has_role("Administrator")
 async def runda_stop(ctx):
-    if runda.is_running():
-        runda.stop()
-        await ctx.send("⏸ Runda została zatrzymana.")
-    else:
-        await ctx.send("❌ Runda nie jest uruchomiona.")
-
+    """Kończy aktualną rundę i blokuje kolejne."""
+    global stop_runda, poprawne_drzwi, wybory
+    stop_runda = True
+    # pobranie kanału gry po nazwie
+    channel = discord.utils.get(ctx.guild.text_channels, name=CHANNEL_NAME)
+    if channel:
+        await channel.send("⏹ Aktualna runda została zatrzymana. Kolejne rundy nie będą się rozpoczynać.")
+        
 @bot.command()
 @commands.has_role("Administrator")
 async def runda_start(ctx):
@@ -450,6 +452,7 @@ async def runda_start(ctx):
         await ctx.send("❌ Runda już działa.")
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
