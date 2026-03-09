@@ -7,7 +7,9 @@ from keep_alive import keep_alive
 import base64
 import requests
 import logging
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timezone, time
+from zoneinfo import ZoneInfo
 
 # --- Konfiguracja ---
 TOKEN = os.environ["DISCORD_TOKEN"]
@@ -15,6 +17,7 @@ GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
 CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
+db_lock = asyncio.Lock()
 
 # --- Logowanie ---
 keep_alive()
@@ -53,11 +56,16 @@ def upload_db():
     if r.status_code in [200, 201]:
         logging.info("✅ Baza wysłana do repo backupowego")
     else:
-        logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {r.json()}")
+        try:
+            err = r.json()
+        except:
+            err = r.text
+        logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {err}")
 
 # --- Połączenie z SQLite ---
 download_db()
-conn = sqlite3.connect("luckydoors.db")
+conn = sqlite3.connect("luckydoors.db", check_same_thread=False)
+conn.execute("PRAGMA journal_mode=WAL;")
 cursor = conn.cursor()
 cursor.execute("PRAGMA table_info(punkty)")
 kolumny = [kol[1] for kol in cursor.fetchall()]
@@ -74,6 +82,8 @@ bot = commands.Bot(command_prefix="-", intents=intents)
 
 poprawne_drzwi = None
 wybory = {}
+bonusowa_runda = False
+jackpot_runda = False
 
 # --- Event: bot ready ---
 @bot.event
@@ -114,10 +124,9 @@ async def on_message(message):
 @bot.event
 async def on_member_remove(member):
     user_id = member.id
-
-    cursor.execute("DELETE FROM punkty WHERE user_id = ?", (user_id,))
-    conn.commit()
-
+    async with db_lock:
+        cursor.execute("DELETE FROM punkty WHERE user_id = ?", (user_id,))
+        conn.commit()
     logger.info(f"🗑 Usunięto punkty użytkownika {member.name} ({user_id}) z bazy")
 
 
@@ -140,38 +149,44 @@ async def runda():
         if not wybory:
             wynik += "Nikt nie wybrał drzwi."
         else:
-            for user_id, wybor in wybory.items():
-                user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+            async with db_lock: 
+                for user_id, wybor in wybory.items():
+                    member = channel.guild.get_member(user_id)
 
-                if wybor == poprawne_drzwi:
-
-                    if jackpot_runda:
-                        punkty = 15
-                    elif bonusowa_runda:
-                        punkty = 5
+                    if member:
+                        user_mention = member.mention
                     else:
-                        punkty = 1
+                        user_mention = f"<@{user_id}>"
 
-                    # Dodanie punktów do obu kolumn
-                    cursor.execute("""
-                        INSERT INTO punkty (user_id, week_points, alltime_points)
-                        VALUES (?, ?, ?)
-                        ON CONFLICT(user_id) DO UPDATE SET
-                        week_points = week_points + ?,
-                        alltime_points = alltime_points + ?
-                    """, (user_id, punkty, punkty, punkty, punkty))
+                    if wybor == poprawne_drzwi:
 
+                        if jackpot_runda:
+                            punkty = 15
+                        elif bonusowa_runda:
+                            punkty = 5
+                        else:
+                            punkty = 1
+
+                        # Dodanie punktów do obu kolumn
+                        cursor.execute("""
+                            INSERT INTO punkty (user_id, week_points, alltime_points)
+                            VALUES (?, ?, ?)
+                            ON CONFLICT(user_id) DO UPDATE SET
+                            week_points = week_points + ?,
+                            alltime_points = alltime_points + ?
+                            """, (user_id, punkty, punkty, punkty, punkty))
+                        
                     conn.commit()
 
-                    if jackpot_runda:
-                        wynik += f"{user.mention} — 💰💰💰 JACKPOT! (+15 pkt)\n"
-                    elif bonusowa_runda:
-                        wynik += f"{user.mention} — 💰 BONUS! (+5 pkt)\n"
-                    else:
-                        wynik += f"{user.mention} — ✅ trafił ({wybor}) (+1 pkt)\n"
+                        if jackpot_runda:
+                            wynik += f"{user_mention} — 💰💰💰 JACKPOT! (+15 pkt)\n"
+                        elif bonusowa_runda:
+                            wynik += f"{user_mention} — 💰 BONUS! (+5 pkt)\n"
+                        else:
+                            wynik += f"{user_mention} — ✅ trafił ({wybor}) (+1 pkt)\n"
 
-                else:
-                    wynik += f"{user.mention} — ❌ pudło ({wybor})\n"
+                    else:
+                        wynik += f"{user_mention} — ❌ pudło ({wybor})\n"
 
         await channel.send(wynik, delete_after=60)
         upload_db()
@@ -227,19 +242,23 @@ Wpisz:
 
     await channel.send(tekst, delete_after=299)
     
-@tasks.loop(hours=168)
+@tasks.loop(time=time(hour=23, minute=59, tzinfo=ZoneInfo("Europe/Warsaw")))
 async def tygodniowy_ranking():
+
+    if datetime.now(ZoneInfo("Europe/Warsaw")).weekday() != 6:
+        return
+        
     channel = discord.utils.get(bot.get_all_channels(), name="❰❰📣❱❱-ogłoszenia")
 
     if channel is None:
         logger.warning("Nie znaleziono kanału ogłoszeń")
         return
+    async with db_lock:
+        cursor.execute(
+            "SELECT user_id, week_points FROM punkty ORDER BY week_points DESC LIMIT 10"
+        )
 
-    cursor.execute(
-        "SELECT user_id, week_points FROM punkty ORDER BY week_points DESC LIMIT 10"
-    )
-
-    top = cursor.fetchall()
+        top = cursor.fetchall()
 
     if not top:
         await channel.send("📊 Brak danych do rankingu.")
@@ -248,12 +267,19 @@ async def tygodniowy_ranking():
     msg = "🏆 **TOP 10 GRACZY TYGODNIA - LUCKY DOORS**\n\n"
 
     for i, (user_id, points) in enumerate(top, start=1):
-        user = bot.get_user(user_id) or await bot.fetch_user(user_id)
-        msg += f"**{i}.** {user.name} — {points} pkt\n"
+        member = channel.guild.get_member(user_id)
+
+        if member:
+            user_mention = member.mention
+        else:
+            user_mention = f"<@{user_id}>"
+            
+        msg += f"**{i}.** {user_mention} — {points} pkt\n"
 
     await channel.send(msg)
-    cursor.execute("UPDATE punkty SET week_points = 0")
-    conn.commit()
+    async with db_lock:
+        cursor.execute("UPDATE punkty SET week_points = 0")
+        conn.commit()
     upload_db()
     
 # --- Komenda -drzwi ---
@@ -278,8 +304,9 @@ async def punkty(ctx):
     if ctx.channel.name != CHANNEL_NAMEX:
         return
     user_id = ctx.author.id
-    cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
+    async with db_lock:
+        cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
     if result:
         week, alltime = result
         await ctx.send(f"{ctx.author.mention}, masz **{week} punktów tygodniowych** i **{alltime} punktów all-time** 🎉")
@@ -289,10 +316,11 @@ async def punkty(ctx):
 @bot.command()
 @commands.has_role("Administrator")
 async def top(ctx):
-    cursor.execute(
-        "SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20"
-    )
-    top_all = cursor.fetchall()
+    async with db_lock:
+        cursor.execute(
+            "SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20"
+        )
+        top_all = cursor.fetchall()
 
     if not top_all:
         await ctx.send("📊 Brak danych do rankingu all-time.")
@@ -336,6 +364,7 @@ async def czas_ranking(ctx):
     
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
