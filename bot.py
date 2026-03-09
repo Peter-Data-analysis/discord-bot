@@ -126,6 +126,7 @@ async def on_member_remove(member):
 async def runda():
     global poprawne_drzwi, wybory
     global bonusowa_runda
+    global jackpot_runda
 
     channel = discord.utils.get(bot.get_all_channels(), name=CHANNEL_NAME)
     if channel is None:
@@ -140,23 +141,31 @@ async def runda():
             wynik += "Nikt nie wybrał drzwi."
         else:
             for user_id, wybor in wybory.items():
-                user = await bot.fetch_user(user_id)
+                user = bot.get_user(user_id) or await bot.fetch_user(user_id)
 
                 if wybor == poprawne_drzwi:
 
-                    punkty = 5 if bonusowa_runda else 1
+                    if jackpot_runda:
+                        punkty = 15
+                    elif bonusowa_runda:
+                        punkty = 5
+                    else:
+                        punkty = 1
 
                     # Dodanie punktów do obu kolumn
                     cursor.execute("""
-                        INSERT INTO punkty (user_id, week_points, alltime_points) VALUES (?, ?, ?)
-                        ON CONFLICT(user_id) DO UPDATE SET 
-                        week_points = week_points + ?, 
+                        INSERT INTO punkty (user_id, week_points, alltime_points)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(user_id) DO UPDATE SET
+                        week_points = week_points + ?,
                         alltime_points = alltime_points + ?
-                        """, (user_id, punkty, punkty, punkty, punkty))
+                    """, (user_id, punkty, punkty, punkty, punkty))
 
                     conn.commit()
 
-                    if bonusowa_runda:
+                    if jackpot_runda:
+                        wynik += f"{user.mention} — 💰💰💰 JACKPOT! (+15 pkt)\n"
+                    elif bonusowa_runda:
                         wynik += f"{user.mention} — 💰 BONUS! (+5 pkt)\n"
                     else:
                         wynik += f"{user.mention} — ✅ trafił ({wybor}) (+1 pkt)\n"
@@ -167,15 +176,19 @@ async def runda():
         await channel.send(wynik, delete_after=60)
         upload_db()
 
-    # --- LOSOWANIE BONUSOWEJ RUNDY ---
-    bonusowa_runda = random.random() < 0.03
+    # --- Losowanie rundy ---
+    jackpot_runda = random.random() < 0.005
+    bonusowa_runda = False
+
+    if not jackpot_runda:
+        bonusowa_runda = random.random() < 0.03
 
     # --- Nowa runda ---
     poprawne_drzwi = random.randint(1, 10)
     wybory = {}
 
     if bonusowa_runda:
-        logging.info("✅ Wystapila bonusowa runda!")
+        logging.info("✅ Wystąpiła bonusowa runda!")
         tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
 
 💰 **BONUSOWA RUNDA!**
@@ -187,6 +200,21 @@ Wpisz:
 `-drzwi numer`
 
 ⏳ Czas: 5 minut"""
+
+    elif jackpot_runda:
+        logging.info("✅ Wystąpiła runda Jackpot!")
+        tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
+
+💰💰💰 **JACKPOT RUNDA!**
+Za poprawne drzwi dostajesz **15 punktów**!!!
+
+🚪 Wybierz drzwi **1-10**
+
+Wpisz:
+`-drzwi numer`
+
+⏳ Czas: 5 minut"""
+
     else:
         tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
 
@@ -220,7 +248,7 @@ async def tygodniowy_ranking():
     msg = "🏆 **TOP 10 GRACZY TYGODNIA - LUCKY DOORS**\n\n"
 
     for i, (user_id, points) in enumerate(top, start=1):
-        user = await bot.fetch_user(user_id)
+        user = bot.get_user(user_id) or await bot.fetch_user(user_id)
         msg += f"**{i}.** {user.name} — {points} pkt\n"
 
     await channel.send(msg)
@@ -308,6 +336,7 @@ async def czas_ranking(ctx):
     
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
