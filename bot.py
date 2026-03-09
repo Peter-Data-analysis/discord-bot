@@ -175,8 +175,6 @@ async def runda():
                             week_points = week_points + ?,
                             alltime_points = alltime_points + ?
                             """, (user_id, punkty, punkty, punkty, punkty))
-                        
-                    conn.commit()
 
                         if jackpot_runda:
                             wynik += f"{user_mention} — 💰💰💰 JACKPOT! (+15 pkt)\n"
@@ -187,7 +185,7 @@ async def runda():
 
                     else:
                         wynik += f"{user_mention} — ❌ pudło ({wybor})\n"
-
+            conn.commit()
         await channel.send(wynik, delete_after=60)
         upload_db()
 
@@ -364,6 +362,7 @@ async def czas_ranking(ctx):
     
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
