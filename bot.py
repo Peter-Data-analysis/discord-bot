@@ -102,6 +102,8 @@ if "alltime_points" not in kolumny:
     cursor.execute("ALTER TABLE punkty ADD COLUMN alltime_points INTEGER DEFAULT 0")
 if "items" not in kolumny:
     cursor.execute("ALTER TABLE punkty ADD COLUMN items TEXT DEFAULT '{}'")
+if "doorcal" not in kolumny:
+    cursor.execute("ALTER TABLE punkty ADD COLUMN doorcal INTEGER DEFAULT 0")
 conn.commit()
 
 poprawne_drzwi = None
@@ -232,22 +234,23 @@ async def runda():
                             punkty = 5
                         else:
                             punkty = 1
-
+                        doorcal = random.randint(1, 5)
                         # Dodanie punktów do obu kolumn
                         cursor.execute("""
-                            INSERT INTO punkty (user_id, week_points, alltime_points)
-                            VALUES (?, ?, ?)
+                            INSERT INTO punkty (user_id, week_points, alltime_points, doorcal)
+                            VALUES (?, ?, ?, ?)
                             ON CONFLICT(user_id) DO UPDATE SET
                             week_points = week_points + ?,
-                            alltime_points = alltime_points + ?
-                            """, (user_id, punkty, punkty, punkty, punkty))
+                            alltime_points = alltime_points + ?,
+                            doorcal = doorcal + ?
+                            """, (user_id, punkty, punkty, doorcal, punkty, punkty, doorcal))
                     
                             # --- Drop przedmiotu ---
                         dropped_item = drop_item(user_id, items_data)
                         if dropped_item:
-                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt) i zdobył **{items_data[dropped_item]['name']}**!\n"
+                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt, +{doorcal} Doorcal i zdobył **{items_data[dropped_item]['name']}**)!\n"
                         else:
-                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt)\n"
+                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt, +{doorcal} Doorcal)\n"
                                 
                     elif pulapka_runda and wybor == pulapka_drzwi:
                         punkty = 1
@@ -590,6 +593,7 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
