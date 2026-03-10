@@ -11,6 +11,7 @@ import asyncio
 import json
 from datetime import datetime, timezone, time
 from zoneinfo import ZoneInfo
+from discord import app_commands
 
 # --- Konfiguracja ---
 TOKEN = os.environ["DISCORD_TOKEN"]
@@ -106,7 +107,7 @@ conn.commit()
 # --- Bot ---
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot.tree.sync()
 
 poprawne_drzwi = None
 pulapka_drzwi = None
@@ -128,26 +129,17 @@ async def on_ready():
 # --- Event: filtrowanie wiadomości ---
 @bot.event
 async def on_message(message):
+    # ignorujemy wiadomości od botów
     if message.author.bot:
         return
 
-    # Kanał gry — tylko komendy -drzwi
+    # Kanał gry — usuwamy wszystko, co nie jest slash command
     if message.channel.name == CHANNEL_NAME:
-        if message.content.startswith("/drzwi"):
-            try:
-                numer = int(message.content.split()[1])
-                if numer < 1 or numer > 5:
-                    await message.delete()
-                    await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 5!", delete_after=5)
-                    return
-            except (IndexError, ValueError):
-                await message.delete()
-                await message.channel.send(f"{message.author.mention} ❌ Wybierz drzwi od 1 do 5!", delete_after=5)
-                return
-        else:
+        if not message.content.startswith("/drzwi"):
             await message.delete()
             return
 
+    # reszta bot.process_commands tylko dla prefixowych (jeśli jeszcze są jakieś)
     await bot.process_commands(message)
     
 # --- Event: usuwanie użytkownika z bazy danych po wyjściu z serwera ---
@@ -295,7 +287,7 @@ Wyczuwam jakieś bonusy 💰...
 🚪 Wybierz drzwi **1-5**
 
 Wpisz:
-`-drzwi numer`
+`/drzwi numer`
 
 ⏳ Czas: 5 minut"""
 
@@ -308,7 +300,7 @@ Szykuje się ostre zarabianie 💰💰💰...
 🚪 Wybierz drzwi **1-5**
 
 Wpisz:
-`-drzwi numer`
+`/drzwi numer`
 
 ⏳ Czas: 5 minut"""
 
@@ -320,7 +312,7 @@ Nic ciekawego...
 🚪 Wybierz drzwi **1-5**
 
 Wpisz:
-`-drzwi numer`
+`/drzwi numer`
 
 ⏳ Czas: 5 minut"""
 
@@ -368,97 +360,86 @@ async def tygodniowy_ranking():
         conn.commit()
     upload_db()
     
-# --- Komenda -drzwi ---
-@bot.command()
-async def drzwi(ctx, numer: int):
-    await ctx.message.delete()
-    if ctx.channel.name != CHANNEL_NAME:
+# --- Komenda /drzwi ---
+@bot.tree.command(name="drzwi", description="Wybierz drzwi w aktualnej rundzie gry")
+async def drzwi(interaction: discord.Interaction, numer: int):
+    if interaction.channel.name != CHANNEL_NAME:
         return
-    # --- sprawdzamy, czy gra nie jest wstrzymana ---
+
     global stop_runda
     if stop_runda:
-        msg = await ctx.send("⏸ Gra została wstrzymana!", delete_after=5)
+        await interaction.response.send_message("⏸ Gra została wstrzymana!", ephemeral=True)
         return
-    elif numer < 1 or numer > 5:
-        await ctx.send("❌ Wybierz drzwi od 1 do 5!", delete_after=5)
-        return
-    elif ctx.author.id in wybory:
-        await ctx.send("❌ Już wybrałeś drzwi w tej rundzie!", delete_after=5)
-        return
-    wybory[ctx.author.id] = numer
-    msg = await ctx.send(f"{ctx.author.mention} wybrał drzwi **{numer}** 🚪", delete_after=5)
 
-# --- Komenda -punkty (zmieniona) ---
-@bot.command()
-async def punkty(ctx):
-    if ctx.channel.name != CHANNEL_NAMEX:
+    if numer < 1 or numer > 5:
+        await interaction.response.send_message("❌ Wybierz drzwi od 1 do 5!", ephemeral=True)
         return
-    user_id = ctx.author.id
+
+    if interaction.user.id in wybory:
+        await interaction.response.send_message("❌ Już wybrałeś drzwi w tej rundzie!", ephemeral=True)
+        return
+
+    wybory[interaction.user.id] = numer
+    await interaction.response.send_message(f"{interaction.user.mention} wybrał drzwi **{numer}** 🚪", ephemeral=True)
+
+# --- Komenda /punkty ---
+@bot.tree.command(name="punkty", description="Sprawdź swoje punkty tygodniowe i all-time")
+async def punkty(interaction: discord.Interaction):
+    if interaction.channel.name != CHANNEL_NAMEX:
+        return
+    user_id = interaction.user.id
     async with db_lock:
         cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (user_id,))
         result = cursor.fetchone()
     if result:
         week, alltime = result
-        await ctx.send(f"{ctx.author.mention}, masz **{week} punktów tygodniowych** i **{alltime} punktów all-time** 🎉")
+        await interaction.response.send_message(f"{interaction.user.mention}, masz **{week} punktów tygodniowych** i **{alltime} punktów all-time** 🎉")
     else:
-        await ctx.send(f"{ctx.author.mention}, jeszcze nie masz punktów. Zacznij grać!")
+        await interaction.response.send_message(f"{interaction.user.mention}, jeszcze nie masz punktów. Zacznij grać!")
 
-@bot.command()
-@commands.has_role("Administrator")
-async def top(ctx):
+# --- Komenda /top ---
+@bot.tree.command(name="top", description="Pokaż TOP 20 graczy all-time")
+@app_commands.checks.has_role("Administrator")
+async def top(interaction: discord.Interaction):
     async with db_lock:
-        cursor.execute(
-            "SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20"
-        )
+        cursor.execute("SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20")
         top_all = cursor.fetchall()
 
     if not top_all:
-        await ctx.send("📊 Brak danych do rankingu all-time.")
+        await interaction.response.send_message("📊 Brak danych do rankingu all-time.")
         return
 
     msg = "🏆 **TOP 20 GRACZY ALL-TIME - LUCKY DOORS**\n\n"
-
     for i, (user_id, points) in enumerate(top_all, start=1):
-        member = ctx.guild.get_member(user_id)
-
-        if member:
-            name = member.display_name   # nick z serwera (z dużymi literami)
-        else:
-            name = f"<@{user_id}>"
-
+        member = interaction.guild.get_member(user_id)
+        name = member.display_name if member else f"<@{user_id}>"
         msg += f"**{i}.** {name} — {points} pkt\n"
 
-    await ctx.send(msg)
+    await interaction.response.send_message(msg)
 
-@bot.command()
-async def czas_ranking(ctx):
-    """Pokazuje, za ile czasu rozpocznie się kolejny ranking tygodniowy"""
+# --- Komenda /czas_ranking ---
+@bot.tree.command(name="czas_ranking", description="Sprawdź, za ile czasu rozpocznie się kolejny ranking tygodniowy")
+async def czas_ranking(interaction: discord.Interaction):
     if not tygodniowy_ranking.is_running():
-        await ctx.send("⏳ Ranking tygodniowy nie jest uruchomiony.")
+        await interaction.response.send_message("⏳ Ranking tygodniowy nie jest uruchomiony.")
         return
 
-    # next_iteration to datetime w UTC
     next_time = tygodniowy_ranking.next_iteration
-
-    # aktualny czas w UTC
     now = datetime.now(timezone.utc)
-
-    # różnica czasu
     delta = next_time - now
-
-    # format w godzinach, minutach, sekundach
     hours, remainder = divmod(int(delta.total_seconds()), 3600)
     minutes, seconds = divmod(remainder, 60)
 
-    await ctx.send(f"⏰ Kolejny ranking tygodniowy rozpocznie się za {hours}h {minutes}m {seconds}s.")
-    
-# --- Komenda administracyjna: dodaj punkty ---
-@bot.command()
-@commands.has_role("Administrator")
-async def punkty_dodaj(ctx, member: discord.Member, ilosc: int):
+    await interaction.response.send_message(f"⏰ Kolejny ranking tygodniowy rozpocznie się za {hours}h {minutes}m {seconds}s.")
+
+# --- Komendy administracyjne /punkty_dodaj i /punkty_usun ---
+@bot.tree.command(name="punkty_dodaj", description="Dodaj punkty wybranemu użytkownikowi")
+@app_commands.checks.has_role("Administrator")
+async def punkty_dodaj(interaction: discord.Interaction, member: discord.Member, ilosc: int):
     if ilosc <= 0:
-        await ctx.send("❌ Podaj dodatnią liczbę punktów!")
+        await interaction.response.send_message("❌ Podaj dodatnią liczbę punktów!", ephemeral=True)
         return
+
     async with db_lock:
         cursor.execute("""
             INSERT INTO punkty (user_id, week_points, alltime_points)
@@ -468,15 +449,15 @@ async def punkty_dodaj(ctx, member: discord.Member, ilosc: int):
             alltime_points = alltime_points + ?
         """, (member.id, ilosc, ilosc, ilosc, ilosc))
         conn.commit()
-    await ctx.send(f"✅ Dodano {ilosc} punktów użytkownikowi {member.mention}.")
+    await interaction.response.send_message(f"✅ Dodano {ilosc} punktów użytkownikowi {member.mention}.")
 
-# --- Komenda administracyjna: usuń punkty ---
-@bot.command()
-@commands.has_role("Administrator")
-async def punkty_usun(ctx, member: discord.Member, ilosc: int):
+@bot.tree.command(name="punkty_usun", description="Usuń punkty wybranemu użytkownikowi")
+@app_commands.checks.has_role("Administrator")
+async def punkty_usun(interaction: discord.Interaction, member: discord.Member, ilosc: int):
     if ilosc <= 0:
-        await ctx.send("❌ Podaj dodatnią liczbę punktów!")
+        await interaction.response.send_message("❌ Podaj dodatnią liczbę punktów!", ephemeral=True)
         return
+
     async with db_lock:
         cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (member.id,))
         result = cursor.fetchone()
@@ -484,142 +465,123 @@ async def punkty_usun(ctx, member: discord.Member, ilosc: int):
             week, alltime = result
             new_week = max(week - ilosc, 0)
             new_alltime = max(alltime - ilosc, 0)
-            cursor.execute("""
-                UPDATE punkty SET week_points = ?, alltime_points = ? WHERE user_id = ?
-            """, (new_week, new_alltime, member.id))
+            cursor.execute("UPDATE punkty SET week_points = ?, alltime_points = ? WHERE user_id = ?",
+                           (new_week, new_alltime, member.id))
             conn.commit()
-            await ctx.send(f"✅ Usunięto {ilosc} punktów użytkownikowi {member.mention}.")
+            await interaction.response.send_message(f"✅ Usunięto {ilosc} punktów użytkownikowi {member.mention}.")
         else:
-            await ctx.send(f"❌ Użytkownik {member.mention} nie ma punktów w bazie.")
+            await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma punktów w bazie.")
 
-# --- Komenda administracyjna: usuń dane użytkownika ---
-@bot.command()
-@commands.has_role("Administrator")
-async def data_usun(ctx, member: discord.Member):
+# --- Komenda /usun_dane ---
+@bot.tree.command(name="usun_dane", description="Usuń wszystkie dane użytkownika z bazy")
+@app_commands.checks.has_role("Administrator")
+async def usun_dane(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
         cursor.execute("DELETE FROM punkty WHERE user_id = ?", (member.id,))
         conn.commit()
-    await ctx.send(f"🗑 Dane użytkownika {member.mention} zostały usunięte z bazy.")
+    await interaction.response.send_message(f"🗑 Dane użytkownika {member.mention} zostały usunięte z bazy.")
 
-# --- Komenda administracyjna: zresetuj punkty ---
-@bot.command()
-@commands.has_role("Administrator")
-async def punkty_reset(ctx):
+# --- Komenda /punkty_reset ---
+@bot.tree.command(name="punkty_reset", description="Zresetuj punkty tygodniowe wszystkich użytkowników")
+@app_commands.checks.has_role("Administrator")
+async def punkty_reset(interaction: discord.Interaction):
     async with db_lock:
         cursor.execute("UPDATE punkty SET week_points = 0")
         conn.commit()
-    await ctx.send("♻️ Punkty tygodniowe wszystkich użytkowników zostały zresetowane.")
-    
-# --- Komenda administracyjna: pokaż punkty użytkownika ---
-@bot.command()
-@commands.has_role("Administrator")
-async def punkty_pokaz(ctx, member: discord.Member):
+    await interaction.response.send_message("♻️ Punkty tygodniowe wszystkich użytkowników zostały zresetowane.")
+
+# --- Komenda /punkty_pokaz ---
+@bot.tree.command(name="punkty_pokaz", description="Pokaż punkty wybranego użytkownika")
+@app_commands.checks.has_role("Administrator")
+async def punkty_pokaz(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
         cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (member.id,))
         result = cursor.fetchone()
     if result:
         week, alltime = result
-        await ctx.send(f"{member.mention} ma **{week} punktów tygodniowych** i **{alltime} punktów all-time**.")
+        await interaction.response.send_message(f"{member.mention} ma **{week} punktów tygodniowych** i **{alltime} punktów all-time**.")
     else:
-        await ctx.send(f"{member.mention} nie ma punktów w bazie.")
+        await interaction.response.send_message(f"{member.mention} nie ma punktów w bazie.")
 
-@bot.command()
-@commands.has_role("Administrator")
-async def runda_stop(ctx):
-    """Kończy aktualną rundę i blokuje kolejne."""
+# --- Komendy administracyjne: runda_stop / runda_start ---
+@bot.tree.command(name="runda_stop", description="Zatrzymaj aktualną rundę gry")
+@app_commands.checks.has_role("Administrator")
+async def runda_stop(interaction: discord.Interaction):
     global stop_runda, stop_msg
     stop_runda = True
-    channel = discord.utils.get(ctx.guild.text_channels, name=CHANNEL_NAME)
+    channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
     if channel:
         stop_msg = await channel.send("⏹ Aktualna runda została zatrzymana. Kolejne rundy nie będą się rozpoczynać")
 
-@bot.command()
-@commands.has_role("Administrator")
-async def reload_items(ctx):
-    download_items()
-    load_items()
-    await ctx.send("🔄 Przedmioty zostały przeładowane.")
-
-@bot.command()
-@commands.has_role("Administrator")
-async def runda_start(ctx):
+@bot.tree.command(name="runda_start", description="Wznów grę po zatrzymaniu rundy")
+@app_commands.checks.has_role("Administrator")
+async def runda_start(interaction: discord.Interaction):
     global stop_runda, stop_msg
     if stop_runda:
         stop_runda = False
-        # usuwanie starej wiadomości stop
         if stop_msg:
             try:
                 await stop_msg.delete()
             except discord.NotFound:
                 pass
             stop_msg = None
-        channel = discord.utils.get(ctx.guild.text_channels, name=CHANNEL_NAME)
+        channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
         if channel:
             await channel.send("▶️ Runda została wznowiona. Poczekaj na wiadomość o nowej rundzie", delete_after=299)
     else:
-        await ctx.send("❌ Gra już działa.")
+        await interaction.response.send_message("❌ Gra już działa.", ephemeral=True)
 
-@bot.command()
-async def sklep(ctx):
+# --- Komenda /sklep ---
+@bot.tree.command(name="sklep", description="Pokaż dostępne przedmioty w sklepie")
+async def sklep(interaction: discord.Interaction):
     msg = "🛒 **SKLEP LUCKY DOORS**\n\n"
-
     for key, item in items_data.items():
-        msg += f"**{item['name']}** — {item['cena']} pkt\n"
-        msg += f"{item['opis']}\n\n"
+        msg += f"**{item['name']}** — {item['cena']} pkt\n{item['opis']}\n\n"
+    await interaction.response.send_message(msg)
 
-    await ctx.send(msg)
-
-@bot.command()
-async def inventory(ctx):
-    user_id = ctx.author.id
+# --- Komenda /inventory ---
+@bot.tree.command(name="itemy", description="Pokaż swoje przedmioty")
+async def itemy(interaction: discord.Interaction):
+    user_id = interaction.user.id
     async with db_lock:
         cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
         result = cursor.fetchone()
 
     if result:
-        items = json.loads(result[0])
+        items = json.loads(result[0]) if result[0] else {}
     else:
         items = {}
 
     if not items:
-        await ctx.send(f"{ctx.author.mention}, nie masz jeszcze żadnych przedmiotów.")
+        await interaction.response.send_message(f"{interaction.user.mention}, nie masz jeszcze żadnych przedmiotów.")
     else:
-        tekst = f"{ctx.author.mention}, oto Twoje przedmioty:\n"
+        tekst = f"{interaction.user.mention}, oto Twoje przedmioty:\n"
         for item, ilosc in items.items():
             tekst += f"- {item}: {ilosc}\n"
-        await ctx.send(tekst)
+        await interaction.response.send_message(tekst)
 
-@bot.command()
-@commands.has_role("Administrator")
-async def przedmiot_dodaj(ctx, member: discord.Member, item_key: str, ilosc: int):
-    """Dodaje określony przedmiot użytkownikowi."""
+# --- Komenda administracyjna /przedmiot_dodaj ---
+@bot.tree.command(name="przedmiot_dodaj", description="Dodaj określony przedmiot użytkownikowi")
+@app_commands.checks.has_role("Administrator")
+async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Member, item_key: str, ilosc: int):
     if ilosc <= 0:
-        await ctx.send("❌ Podaj dodatnią liczbę przedmiotów!", delete_after=5)
+        await interaction.response.send_message("❌ Podaj dodatnią liczbę przedmiotów!", ephemeral=True)
         return
 
     if item_key not in items_data:
-        await ctx.send(f"❌ Nie znaleziono przedmiotu o kluczu `{item_key}`!", delete_after=5)
+        await interaction.response.send_message(f"❌ Nie znaleziono przedmiotu o kluczu `{item_key}`!", ephemeral=True)
         return
 
     user_id = member.id
     async with db_lock:
         cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
         result = cursor.fetchone()
-        if result and result[0]:
-            user_items = json.loads(result[0])
-        else:
-            user_items = {}
-
+        user_items = json.loads(result[0]) if result and result[0] else {}
         user_items[item_key] = user_items.get(item_key, 0) + ilosc
         cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
         conn.commit()
 
-    await ctx.send(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", delete_after=10)
-        
-# --- Start bota ---
-bot.run(TOKEN)
-
-
+    await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 
 
