@@ -64,7 +64,7 @@ def upload_db():
         logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {err}")
 
 def download_items():
-    url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/items.json"
+    url = "https://raw.githubusercontent.com/Paither/discord-bot-backup/main/items.json"
 
     r = requests.get(url)
     if r.status_code == 200:
