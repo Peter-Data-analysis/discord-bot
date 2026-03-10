@@ -649,7 +649,7 @@ async def pokaz_walute(interaction: discord.Interaction, member: discord.Member)
 
     await interaction.response.send_message(
         f"{member.mention} ma **{amount} Doorcal**.", 
-        ephemeral=True
+        ephemeral=True)
 
 @bot.tree.command(name="handel", description="wystaw swoją ofertę")
 async def handel(interaction: discord.Interaction, have: str, want: str, amount: int):
@@ -742,3 +742,4 @@ async def handel(interaction: discord.Interaction, have: str, want: str, amount:
     oferty[msg.id] = {"oferent": user_id, "have": have, "want": want, "amount": amount}
     await interaction.response.send_message("✅ Twoja oferta została wystawiona!", ephemeral=True)
 bot.run(TOKEN)
+
