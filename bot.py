@@ -146,9 +146,6 @@ async def on_message(message):
         if not message.content.startswith("/drzwi"):
             await message.delete()
             return
-
-    # reszta bot.process_commands tylko dla prefixowych (jeśli jeszcze są jakieś)
-    await bot.process_commands(message)
     
 # --- Event: usuwanie użytkownika z bazy danych po wyjściu z serwera ---
 @bot.event
@@ -592,6 +589,7 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
