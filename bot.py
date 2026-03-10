@@ -106,7 +106,7 @@ conn.commit()
 # --- Bot ---
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="-", intents=intents)
+bot = commands.Bot(command_prefix="/", intents=intents)
 
 poprawne_drzwi = None
 pulapka_drzwi = None
@@ -618,6 +618,7 @@ async def przedmiot_dodaj(ctx, member: discord.Member, item_key: str, ilosc: int
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
