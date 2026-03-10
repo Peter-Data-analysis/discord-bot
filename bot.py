@@ -616,7 +616,40 @@ async def dodaj_walute(interaction: discord.Interaction, member: discord.Member,
         conn.commit()
 
     await interaction.response.send_message(f"✅ Dodano {ilosc} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
+
+# --- Komenda administracyjna /usun_walute ---
+@bot.tree.command(name="usun_walute", description="Usuń Doorcal wybranemu użytkownikowi")
+@app_commands.checks.has_role("Administrator")
+async def usun_walute(interaction: discord.Interaction, member: discord.Member, ilosc: int):
+    if ilosc <= 0:
+        await interaction.response.send_message("❌ Podaj dodatnią ilość Doorcal!", ephemeral=True)
+        return
+
+    async with db_lock:
+        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (member.id,))
+        result = cursor.fetchone()
+        if result:
+            current = result[0]
+            new_amount = max(current - ilosc, 0)
+            cursor.execute("UPDATE punkty SET doorcal = ? WHERE user_id = ?", (new_amount, member.id))
+            conn.commit()
+            await interaction.response.send_message(f"✅ Usunięto {ilosc} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma Doorcal.", ephemeral=True)
+
+# --- Komenda /pokaz_walute ---
+@bot.tree.command(name="pokaz_walute", description="Pokaż ilość Doorcal wybranego użytkownika")
+@app_commands.checks.has_role("Administrator")
+async def pokaz_walute(interaction: discord.Interaction, member: discord.Member):
+    async with db_lock:
+        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (member.id,))
+        result = cursor.fetchone()
+        amount = result[0] if result else 0
+
+    await interaction.response
+    
 bot.run(TOKEN)
+
 
 
 
