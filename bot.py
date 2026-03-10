@@ -133,7 +133,7 @@ async def on_message(message):
 
     # Kanał gry — tylko komendy -drzwi
     if message.channel.name == CHANNEL_NAME:
-        if message.content.startswith("-drzwi"):
+        if message.content.startswith("/drzwi"):
             try:
                 numer = int(message.content.split()[1])
                 if numer < 1 or numer > 5:
@@ -618,6 +618,7 @@ async def przedmiot_dodaj(ctx, member: discord.Member, item_key: str, ilosc: int
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
