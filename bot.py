@@ -588,9 +588,37 @@ async def inventory(ctx):
         for item, ilosc in items.items():
             tekst += f"- {item}: {ilosc}\n"
         await ctx.send(tekst)
+
+@bot.command()
+@commands.has_role("Administrator")
+async def przedmiot_dodaj(ctx, member: discord.Member, item_key: str, ilosc: int):
+    """Dodaje określony przedmiot użytkownikowi."""
+    if ilosc <= 0:
+        await ctx.send("❌ Podaj dodatnią liczbę przedmiotów!", delete_after=5)
+        return
+
+    if item_key not in items_data:
+        await ctx.send(f"❌ Nie znaleziono przedmiotu o kluczu `{item_key}`!", delete_after=5)
+        return
+
+    user_id = member.id
+    async with db_lock:
+        cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        if result and result[0]:
+            user_items = json.loads(result[0])
+        else:
+            user_items = {}
+
+        user_items[item_key] = user_items.get(item_key, 0) + ilosc
+        cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
+        conn.commit()
+
+    await ctx.send(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", delete_after=10)
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
