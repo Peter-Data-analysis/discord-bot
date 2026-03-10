@@ -116,7 +116,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.members = True
-bot = commands.Bot(intents=intents)
+bot = commands.Bot(command_prefix=None, intents=intents)
 
 @bot.event
 async def on_ready():
@@ -592,6 +592,7 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
