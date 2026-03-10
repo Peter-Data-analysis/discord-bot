@@ -229,12 +229,15 @@ async def runda():
                     if wybor == poprawne_drzwi:
 
                         if jackpot_runda:
+                            doorcal = random.randint(15, 40)
                             punkty = 15
                         elif bonusowa_runda:
+                            doorcal = random.randint(5, 20)
                             punkty = 5
                         else:
+                            doorcal = random.randint(1, 4)
                             punkty = 1
-                        doorcal = random.randint(1, 5)
+
                         # Dodanie punktów do obu kolumn
                         cursor.execute("""
                             INSERT INTO punkty (user_id, week_points, alltime_points, doorcal)
@@ -592,7 +595,29 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
 
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
+@bot.tree.command(name="dodaj_walute", description="Dodaj Doorcal wybranemu użytkownikowi")
+@app_commands.checks.has_role("Administrator")
+async def dodaj_walute(interaction: discord.Interaction, member: discord.Member, ilosc: int):
+    if ilosc <= 0:
+        await interaction.response.send_message("❌ Podaj dodatnią ilość Doorcal!", ephemeral=True)
+        return
+
+    async with db_lock:
+        # Pobieramy aktualną ilość doorcal
+        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (member.id,))
+        result = cursor.fetchone()
+        current = result[0] if result else 0
+
+        # Aktualizujemy bazę
+        if result:
+            cursor.execute("UPDATE punkty SET doorcal = ? WHERE user_id = ?", (current + ilosc, member.id))
+        else:
+            cursor.execute("INSERT INTO punkty (user_id, week_points, alltime_points, doorcal) VALUES (?, 0, 0, ?)", (member.id, ilosc))
+        conn.commit()
+
+    await interaction.response.send_message(f"✅ Dodano {ilosc} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
 bot.run(TOKEN)
+
 
 
 
