@@ -116,7 +116,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.members = True
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot = commands.Bot(command_prefix=None, intents=intents)
 
 @bot.event
 async def on_ready():
@@ -141,12 +141,13 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Kanał gry — usuwamy wszystko, co nie jest slash command
+    # kanał gry — usuwamy wszystko, co nie jest slash command
     if message.channel.name == CHANNEL_NAME:
-        if not message.content.startswith("/drzwi"):
+        # slash commands nie zaczynają się od "/" w treści wiadomości,
+        # więc nie chcemy niczego usuwać jeśli to komenda slash
+        # (Discord API same obsługuje slashy)
+        if message.content and not message.content.startswith("/drzwi"):
             await message.delete()
-            return
-    
 # --- Event: usuwanie użytkownika z bazy danych po wyjściu z serwera ---
 @bot.event
 async def on_member_remove(member):
