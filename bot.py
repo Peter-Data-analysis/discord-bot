@@ -655,6 +655,11 @@ async def pokaz_walute(interaction: discord.Interaction, member: discord.Member)
         ephemeral=True)
 
 @bot.tree.command(name="handel", description="Wystaw ofertę handlu")
+@app_commands.describe(
+    have="What you have",
+    want="what you want",
+    amount="amount"
+)
 async def handel(interaction: discord.Interaction, have: str, want: str, amount: int):
 
     if interaction.channel.name != HANDEL_CHANNEL:
@@ -722,6 +727,8 @@ async def handel(interaction: discord.Interaction, have: str, want: str, amount:
                     doorcal_o -= amount
                 else:
                     items_o[have] -= amount
+                    if items_o[have] <= 0:
+                        del items_o[have]
 
                 # --- akceptor oddaje ---
                 if want.lower() == "doorcal":
@@ -779,5 +786,6 @@ async def handel(interaction: discord.Interaction, have: str, want: str, amount:
 
     await interaction.response.send_message("✅ Oferta została wystawiona!", ephemeral=True)
 bot.run(TOKEN)
+
 
 
