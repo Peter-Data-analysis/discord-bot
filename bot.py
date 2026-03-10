@@ -64,15 +64,18 @@ def upload_db():
         logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {err}")
 
 def download_items():
-    url = "https://raw.githubusercontent.com/Paither/discord-bot-backup/main/items.json"
-
-    r = requests.get(url)
+    url = "https://api.github.com/repos/Paither/discord-bot-backup/contents/items.json"
+    r = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
     if r.status_code == 200:
-        with open("items.json", "w", encoding="utf-8") as f:
-            f.write(r.text)
-        logging.info("✅ Pobrano items.json")
+        try:
+            content = base64.b64decode(r.json()["content"])
+            with open("items.json", "wb") as f:
+                f.write(content)
+            logging.info("✅ Pobrano items.json")
+        except Exception as e:
+            logging.error(f"❌ Błąd przy zapisie items.json: {e}")
     else:
-        logging.warning("⚠ Nie udało się pobrać items.json")
+        logging.warning(f"⚠ Nie udało się pobrać items.json, status: {r.status_code}")
 
 def load_items():
     global items_data
@@ -588,6 +591,7 @@ async def inventory(ctx):
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
