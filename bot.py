@@ -583,33 +583,4 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
 
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+bot.run(TOKEN)
