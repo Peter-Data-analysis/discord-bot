@@ -20,6 +20,7 @@ GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
 CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
+HANDEL_CHANNEL = "❰❰💼❱❱handel"
 db_lock = asyncio.Lock()
 
 # --- Logowanie ---
@@ -28,6 +29,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 stop_runda = False
 items_data = {}
+oferty = {}
+
 # --- Funkcja backupu bazy na GitHub ---
 def download_db():
     url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
@@ -651,95 +654,130 @@ async def pokaz_walute(interaction: discord.Interaction, member: discord.Member)
         f"{member.mention} ma **{amount} Doorcal**.", 
         ephemeral=True)
 
-@bot.tree.command(name="handel", description="wystaw swoją ofertę")
+@bot.tree.command(name="handel", description="Wystaw ofertę handlu")
 async def handel(interaction: discord.Interaction, have: str, want: str, amount: int):
+
+    if interaction.channel.name != HANDEL_CHANNEL:
+        await interaction.response.send_message("❌ Tej komendy można używać tylko w kanale handlu!", ephemeral=True)
+        return
+
     user_id = interaction.user.id
-    oferty = {}
+
     async with db_lock:
-        cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
         result = cursor.fetchone()
-        items = json.loads(result[0]) if result[0] else {}
-        doorcal = result[1] if result else 0
+
+    items = json.loads(result[0]) if result and result[0] else {}
+    doorcal = result[1] if result else 0
+
+    # sprawdzenie czy gracz ma przedmiot
     if have.lower() == "doorcal":
         if doorcal < amount:
             await interaction.response.send_message("❌ Nie masz tyle Doorcal!", ephemeral=True)
             return
     else:
         if items.get(have, 0) < amount:
-            await interaction.response.send_message(f"❌ Nie masz {amount} x {have}!", ephemeral=True)
+            await interaction.response.send_message(f"❌ Nie masz {amount} x {have}", ephemeral=True)
             return
-    class Akceptuj(View):
+
+    class TradeView(View):
         def __init__(self):
             super().__init__(timeout=None)
-            
+
         @discord.ui.button(label="Akceptuj", style=discord.ButtonStyle.green)
-        async def accept(self, button: Button, button_interaction: discord.Interaction):
-            akceptor_id = button_interaction.user.id
-            if akceptor_id == user_id:
-                await button_interaction.response.send_message("❌ Nie możesz zaakceptować własnej oferty!", ephemeral=True)
+        async def accept(self, interaction_btn: discord.Interaction, button: Button):
+
+            if interaction_btn.user.id == user_id:
+                await interaction_btn.response.send_message("❌ Nie możesz zaakceptować własnej oferty!", ephemeral=True)
                 return
-            
-            async with db_lock:
-                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id = ?", (akceptor_id,))
-                result = cursor.fetchone()
-                items_a = json.loads(result[0]) if result and result[0] else {}
-                doorcal_a = result[1] if result else 0
-                
-            if want.lower() == "doorcal":
-                if doorcal_a < amount:
-                    await button_interaction.response.send_message("❌ Nie masz tyle Doorcal!", ephemeral=True)
-                    return
-            else:
-                if items_a.get(want, 0) < amount:
-                    await button_interaction.response.send_message(f"❌ Nie masz {amount} x {want}!", ephemeral=True)
-                    return
 
-            # Wykonanie wymiany
             async with db_lock:
-                # Aktualizacja oferenta
-                if have.lower() == "doorcal":
-                    doorcal_new = doorcal - amount
-                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, user_id))
-                else:
-                    items[have] -= amount
-                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items), user_id))
 
-                # Aktualizacja akceptora
+                # dane akceptora
+                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (interaction_btn.user.id,))
+                result_a = cursor.fetchone()
+
+                items_a = json.loads(result_a[0]) if result_a and result_a[0] else {}
+                doorcal_a = result_a[1] if result_a else 0
+
+                # sprawdzanie czy ma to co trzeba
                 if want.lower() == "doorcal":
-                    doorcal_new = doorcal_a - amount
-                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, akceptor_id))
+                    if doorcal_a < amount:
+                        await interaction_btn.response.send_message("❌ Nie masz tyle Doorcal!", ephemeral=True)
+                        return
+                else:
+                    if items_a.get(want, 0) < amount:
+                        await interaction_btn.response.send_message(f"❌ Nie masz {amount} x {want}", ephemeral=True)
+                        return
+
+                # dane oferenta
+                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
+                result_o = cursor.fetchone()
+
+                items_o = json.loads(result_o[0]) if result_o and result_o[0] else {}
+                doorcal_o = result_o[1] if result_o else 0
+
+                # --- oferent oddaje ---
+                if have.lower() == "doorcal":
+                    doorcal_o -= amount
+                else:
+                    items_o[have] -= amount
+
+                # --- akceptor oddaje ---
+                if want.lower() == "doorcal":
+                    doorcal_a -= amount
                 else:
                     items_a[want] -= amount
-                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items_a), akceptor_id))
 
-                # Dodanie zasobów w drugą stronę
+                # --- oferent dostaje ---
+                if want.lower() == "doorcal":
+                    doorcal_o += amount
+                else:
+                    items_o[want] = items_o.get(want, 0) + amount
+
+                # --- akceptor dostaje ---
                 if have.lower() == "doorcal":
-                    doorcal_new = result[1] + amount if result else amount
-                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, akceptor_id))
+                    doorcal_a += amount
                 else:
                     items_a[have] = items_a.get(have, 0) + amount
-                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items_a), akceptor_id))
 
-                if want.lower() == "doorcal":
-                    doorcal_new = result[1] + amount if result else amount
-                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, user_id))
-                else:
-                    items[want] = items.get(want, 0) + amount
-                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items), user_id))
+                # zapis do bazy
+                cursor.execute(
+                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    (json.dumps(items_o), doorcal_o, user_id)
+                )
+
+                cursor.execute(
+                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    (json.dumps(items_a), doorcal_a, interaction_btn.user.id)
+                )
 
                 conn.commit()
 
-            # Edytuj wiadomość i zakończ handel
-            await button_interaction.message.edit(content=f"✅ Oferta od {interaction.user.mention} została zaakceptowana przez {button_interaction.user.mention}", view=None)
-            await button_interaction.response.send_message("✅ Wymiana zakończona!", ephemeral=True)
+            await interaction_btn.message.edit(
+                content=f"✅ {interaction.user.mention} wymienił się z {interaction_btn.user.mention}",
+                view=None
+            )
 
-    view = Akceptuj()
-    channel = discord.utils.get(interaction.guild.text_channels, name="handel")
-    if not channel:
-        channel = interaction.channel  # fallback
+            await interaction_btn.response.send_message("✅ Handel zakończony!", ephemeral=True)
 
-    msg = await channel.send(f"💱 {interaction.user.mention} oferuje **{amount} x {have}** i want **{amount} x {want}**", view=view)
-    oferty[msg.id] = {"oferent": user_id, "have": have, "want": want, "amount": amount}
-    await interaction.response.send_message("✅ Twoja oferta została wystawiona!", ephemeral=True)
+    view = TradeView()
+
+    msg = await interaction.channel.send(
+        f"💱 **OFERTA HANDLU**\n"
+        f"{interaction.user.mention} oferuje **{amount} x {have}**\n"
+        f"w zamian za **{amount} x {want}**",
+        view=view
+    )
+
+    oferty[msg.id] = {
+        "oferent": user_id,
+        "have": have,
+        "want": want,
+        "amount": amount
+    }
+
+    await interaction.response.send_message("✅ Oferta została wystawiona!", ephemeral=True)
 bot.run(TOKEN)
+
 
