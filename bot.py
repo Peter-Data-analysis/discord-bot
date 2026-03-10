@@ -243,11 +243,12 @@ async def runda():
                             """, (user_id, punkty, punkty, punkty, punkty))
                     
                             # --- Drop przedmiotu ---
-                            dropped_item = drop_item(user_id, items_data)
-                            if dropped_item:
-                                wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt) i zdobył **{items_data[dropped_item]['name']}**!\n"
-                            else:
-                                wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt)\n"
+                        dropped_item = drop_item(user_id, items_data)
+                        if dropped_item:
+                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt) i zdobył **{items_data[dropped_item]['name']}**!\n"
+                        else:
+                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt)\n"
+                                
                     elif pulapka_runda and wybor == pulapka_drzwi:
                         punkty = 1
                         cursor.execute("""
@@ -588,6 +589,7 @@ async def inventory(ctx):
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
