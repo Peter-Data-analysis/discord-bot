@@ -8,6 +8,7 @@ import base64
 import requests
 import logging
 import asyncio
+import json
 from datetime import datetime, timezone, time
 from zoneinfo import ZoneInfo
 
@@ -24,7 +25,7 @@ keep_alive()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 stop_runda = False
-
+items_data = {}
 # --- Funkcja backupu bazy na GitHub ---
 def download_db():
     url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
@@ -63,8 +64,30 @@ def upload_db():
             err = r.text
         logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {err}")
 
+def download_items():
+    url = "https://raw.githubusercontent.com/Paither/discord-bot-backup/main/items.json"
+
+    r = requests.get(url)
+    if r.status_code == 200:
+        with open("items.json", "w", encoding="utf-8") as f:
+            f.write(r.text)
+        logging.info("✅ Pobrano items.json")
+    else:
+        logging.warning("⚠ Nie udało się pobrać items.json")
+
+def load_items():
+    global items_data
+    try:
+        with open("items.json", "r", encoding="utf-8") as f:
+            items_data = json.load(f)
+        logging.info("✅ Items załadowane")
+    except Exception as e:
+        logging.error(f"❌ Błąd ładowania items: {e}")
+
 # --- Połączenie z SQLite ---
 download_db()
+download_items()
+load_items()
 conn = sqlite3.connect("luckydoors.db", check_same_thread=False)
 conn.execute("PRAGMA journal_mode=WAL;")
 cursor = conn.cursor()
@@ -74,6 +97,8 @@ if "week_points" not in kolumny:
     cursor.execute("ALTER TABLE punkty ADD COLUMN week_points INTEGER DEFAULT 0")
 if "alltime_points" not in kolumny:
     cursor.execute("ALTER TABLE punkty ADD COLUMN alltime_points INTEGER DEFAULT 0")
+if "items" not in kolumny:
+    cursor.execute("ALTER TABLE punkty ADD COLUMN items TEXT DEFAULT '{}'")
 conn.commit()
 
 # --- Bot ---
@@ -132,6 +157,42 @@ async def on_member_remove(member):
         conn.commit()
     logger.info(f"🗑 Usunięto punkty użytkownika {member.name} ({user_id}) z bazy")
 
+# --- Szanse dropu w zależności od rarity---
+def drop_item(user_id, items_json):
+    drop_chances = {
+        "common": 0.20,
+        "uncommon": 0.15,
+        "rare": 0.10,
+        "epic": 0.05,
+        "legendary": 0.01
+    }
+
+    drop_candidates = []
+
+    for key, data in items_json.items():
+        rarity = data.get("rarity", "common").lower()
+        chance = drop_chances.get(rarity, 0)
+        if random.random() < chance:
+            drop_candidates.append(key)
+
+    if drop_candidates:
+        chosen_item = random.choice(drop_candidates)
+
+        # Pobranie aktualnych przedmiotów użytkownika
+        cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        if result and result[0]:
+            user_items = json.loads(result[0])
+        else:
+            user_items = {}
+
+        # Dodanie przedmiotu
+        user_items[chosen_item] = user_items.get(chosen_item, 0) + 1
+        cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
+        conn.commit()
+
+        return chosen_item
+    return None
 
 # --- Pętla rundy ---
 @tasks.loop(minutes=5)
@@ -172,7 +233,6 @@ async def runda():
                         else:
                             punkty = 1
 
-
                         # Dodanie punktów do obu kolumn
                         cursor.execute("""
                             INSERT INTO punkty (user_id, week_points, alltime_points)
@@ -181,14 +241,13 @@ async def runda():
                             week_points = week_points + ?,
                             alltime_points = alltime_points + ?
                             """, (user_id, punkty, punkty, punkty, punkty))
-
-                        if jackpot_runda:
-                            wynik += f"{user_mention} — 💰💰💰 JACKPOT! (+15 pkt)\n"
-                        elif bonusowa_runda:
-                            wynik += f"{user_mention} — 💰 BONUS! (+5 pkt)\n"
-                        else:
-                            wynik += f"{user_mention} — ✅ trafił (+1 pkt)\n"
-                            
+                    
+                            # --- Drop przedmiotu ---
+                            dropped_item = drop_item(user_id, items_data)
+                            if dropped_item:
+                                wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt) i zdobył **{items_data[dropped_item]['name']}**!\n"
+                            else:
+                                wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt)\n"
                     elif pulapka_runda and wybor == pulapka_drzwi:
                         punkty = 1
                         cursor.execute("""
@@ -473,6 +532,13 @@ async def runda_stop(ctx):
 
 @bot.command()
 @commands.has_role("Administrator")
+async def reload_items(ctx):
+    download_items()
+    load_items()
+    await ctx.send("🔄 Przedmioty zostały przeładowane.")
+
+@bot.command()
+@commands.has_role("Administrator")
 async def runda_start(ctx):
     global stop_runda, stop_msg
     if stop_runda:
@@ -489,9 +555,40 @@ async def runda_start(ctx):
             await channel.send("▶️ Runda została wznowiona. Poczekaj na wiadomość o nowej rundzie", delete_after=299)
     else:
         await ctx.send("❌ Gra już działa.")
+
+@bot.command()
+async def sklep(ctx):
+    msg = "🛒 **SKLEP LUCKY DOORS**\n\n"
+
+    for key, item in items_data.items():
+        msg += f"**{item['name']}** — {item['cena']} pkt\n"
+        msg += f"{item['opis']}\n\n"
+
+    await ctx.send(msg)
+
+@bot.command()
+async def inventory(ctx):
+    user_id = ctx.author.id
+    async with db_lock:
+        cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+
+    if result:
+        items = json.loads(result[0])
+    else:
+        items = {}
+
+    if not items:
+        await ctx.send(f"{ctx.author.mention}, nie masz jeszcze żadnych przedmiotów.")
+    else:
+        tekst = f"{ctx.author.mention}, oto Twoje przedmioty:\n"
+        for item, ilosc in items.items():
+            tekst += f"- {item}: {ilosc}\n"
+        await ctx.send(tekst)
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
