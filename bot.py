@@ -104,11 +104,6 @@ if "items" not in kolumny:
     cursor.execute("ALTER TABLE punkty ADD COLUMN items TEXT DEFAULT '{}'")
 conn.commit()
 
-# --- Bot ---
-intents = discord.Intents.default()
-intents.message_content = True
-bot.tree.sync()
-
 poprawne_drzwi = None
 pulapka_drzwi = None
 wybory = {}
@@ -117,10 +112,18 @@ pulapka_runda= False
 jackpot_runda = False
 
 # --- Event: bot ready ---
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="/", intents=intents)
+
 @bot.event
 async def on_ready():
     print(f"Zalogowano jako {bot.user}")
 
+    # synchronizacja slash commandów
+    await bot.tree.sync()
+
+    # start pętli rundy i rankingu, jeśli nie są uruchomione
     if not runda.is_running():
         runda.start()
     if not tygodniowy_ranking.is_running():
@@ -584,3 +587,4 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 bot.run(TOKEN)
+
