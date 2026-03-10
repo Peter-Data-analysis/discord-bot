@@ -120,14 +120,14 @@ bot = commands.Bot(command_prefix=None, intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Zalogowano jako {bot.user}")
+    logging.info(f"Zalogowano jako {bot.user}")
 
     # synchronizacja komend slash dla wszystkich serwerów
     try:
         synced = await bot.tree.sync()
-        print(f"✅ Zsynchronizowano {len(synced)} komend slash")
+        logging.info(f"✅ Zsynchronizowano {len(synced)} komend slash")
     except Exception as e:
-        print(f"❌ Błąd przy sync komend: {e}")
+        logging.error(f"❌ Błąd przy sync komend: {e}")
 
     if not runda.is_running():
         runda.start()
@@ -590,6 +590,7 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
