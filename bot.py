@@ -130,7 +130,7 @@ async def on_ready():
 
     # synchronizacja komend slash dla wszystkich serwerów
     try:
-        synced = await bot.tree.sync()
+        synced = await bot.tree.sync(guild=discord.Object(id=1478885390407434455))
         logging.info(f"✅ Zsynchronizowano {len(synced)} komend slash")
     except Exception as e:
         logging.error(f"❌ Błąd przy sync komend: {e}")
@@ -786,6 +786,7 @@ async def handel(interaction: discord.Interaction, have: str, want: str, amount:
 
     await interaction.response.send_message("✅ Oferta została wystawiona!", ephemeral=True)
 bot.run(TOKEN)
+
 
 
 
