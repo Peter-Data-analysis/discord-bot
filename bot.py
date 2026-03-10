@@ -114,16 +114,20 @@ jackpot_runda = False
 # --- Event: bot ready ---
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="/", intents=intents)
+intents.guilds = True
+intents.members = True
 
 @bot.event
 async def on_ready():
     print(f"Zalogowano jako {bot.user}")
 
-    # synchronizacja slash commandów
-    await bot.tree.sync()
+    # synchronizacja komend slash dla wszystkich serwerów
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Zsynchronizowano {len(synced)} komend slash")
+    except Exception as e:
+        print(f"❌ Błąd przy sync komend: {e}")
 
-    # start pętli rundy i rankingu, jeśli nie są uruchomione
     if not runda.is_running():
         runda.start()
     if not tygodniowy_ranking.is_running():
@@ -587,4 +591,5 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
     await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 bot.run(TOKEN)
+
 
