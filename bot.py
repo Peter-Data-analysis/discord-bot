@@ -1,4 +1,5 @@
 import discord
+from discord.ui import View, Button
 from discord.ext import commands, tasks
 import random
 import sqlite3
@@ -146,7 +147,7 @@ async def on_message(message):
     # kanał gry — usuwamy wszystko, co nie jest slash command
     if message.channel.name == CHANNEL_NAME:
         # slash commands nie zaczynają się od "/" w treści wiadomości,
-        # więc nie chcemy niczego usuwać jeśli to komenda slash
+        # więc nie wantmy niczego usuwać jeśli to komenda slash
         # (Discord API same obsługuje slashy)
         if message.content and not message.content.startswith("/drzwi"):
             await message.delete()
@@ -447,8 +448,8 @@ async def czas_ranking(interaction: discord.Interaction):
 # --- Komendy administracyjne /punkty_dodaj i /punkty_usun ---
 @bot.tree.command(name="punkty_dodaj", description="Dodaj punkty wybranemu użytkownikowi")
 @app_commands.checks.has_role("Administrator")
-async def punkty_dodaj(interaction: discord.Interaction, member: discord.Member, ilosc: int):
-    if ilosc <= 0:
+async def punkty_dodaj(interaction: discord.Interaction, member: discord.Member, amount: int):
+    if amount <= 0:
         await interaction.response.send_message("❌ Podaj dodatnią liczbę punktów!", ephemeral=True)
         return
 
@@ -459,14 +460,14 @@ async def punkty_dodaj(interaction: discord.Interaction, member: discord.Member,
             ON CONFLICT(user_id) DO UPDATE SET
             week_points = week_points + ?,
             alltime_points = alltime_points + ?
-        """, (member.id, ilosc, ilosc, ilosc, ilosc))
+        """, (member.id, amount, amount, amount, amount))
         conn.commit()
-    await interaction.response.send_message(f"✅ Dodano {ilosc} punktów użytkownikowi {member.mention}.")
+    await interaction.response.send_message(f"✅ Dodano {amount} punktów użytkownikowi {member.mention}.")
 
 @bot.tree.command(name="punkty_usun", description="Usuń punkty wybranemu użytkownikowi")
 @app_commands.checks.has_role("Administrator")
-async def punkty_usun(interaction: discord.Interaction, member: discord.Member, ilosc: int):
-    if ilosc <= 0:
+async def punkty_usun(interaction: discord.Interaction, member: discord.Member, amount: int):
+    if amount <= 0:
         await interaction.response.send_message("❌ Podaj dodatnią liczbę punktów!", ephemeral=True)
         return
 
@@ -475,12 +476,12 @@ async def punkty_usun(interaction: discord.Interaction, member: discord.Member, 
         result = cursor.fetchone()
         if result:
             week, alltime = result
-            new_week = max(week - ilosc, 0)
-            new_alltime = max(alltime - ilosc, 0)
+            new_week = max(week - amount, 0)
+            new_alltime = max(alltime - amount, 0)
             cursor.execute("UPDATE punkty SET week_points = ?, alltime_points = ? WHERE user_id = ?",
                            (new_week, new_alltime, member.id))
             conn.commit()
-            await interaction.response.send_message(f"✅ Usunięto {ilosc} punktów użytkownikowi {member.mention}.")
+            await interaction.response.send_message(f"✅ Usunięto {amount} punktów użytkownikowi {member.mention}.")
         else:
             await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma punktów w bazie.")
 
@@ -568,15 +569,15 @@ async def itemy(interaction: discord.Interaction):
         await interaction.response.send_message(f"{interaction.user.mention}, nie masz jeszcze żadnych przedmiotów.")
     else:
         tekst = f"{interaction.user.mention}, oto Twoje przedmioty:\n"
-        for item, ilosc in items.items():
-            tekst += f"- {item}: {ilosc}\n"
+        for item, amount in items.items():
+            tekst += f"- {item}: {amount}\n"
         await interaction.response.send_message(tekst)
 
 # --- Komenda administracyjna /przedmiot_dodaj ---
 @bot.tree.command(name="przedmiot_dodaj", description="Dodaj określony przedmiot użytkownikowi")
 @app_commands.checks.has_role("Administrator")
-async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Member, item_key: str, ilosc: int):
-    if ilosc <= 0:
+async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Member, item_key: str, amount: int):
+    if amount <= 0:
         await interaction.response.send_message("❌ Podaj dodatnią liczbę przedmiotów!", ephemeral=True)
         return
 
@@ -589,16 +590,16 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
         cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
         result = cursor.fetchone()
         user_items = json.loads(result[0]) if result and result[0] else {}
-        user_items[item_key] = user_items.get(item_key, 0) + ilosc
+        user_items[item_key] = user_items.get(item_key, 0) + amount
         cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
         conn.commit()
 
-    await interaction.response.send_message(f"✅ Dodano **{ilosc} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Dodano **{amount} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
 @bot.tree.command(name="dodaj_walute", description="Dodaj Doorcal wybranemu użytkownikowi")
 @app_commands.checks.has_role("Administrator")
-async def dodaj_walute(interaction: discord.Interaction, member: discord.Member, ilosc: int):
-    if ilosc <= 0:
+async def dodaj_walute(interaction: discord.Interaction, member: discord.Member, amount: int):
+    if amount <= 0:
         await interaction.response.send_message("❌ Podaj dodatnią ilość Doorcal!", ephemeral=True)
         return
 
@@ -610,18 +611,18 @@ async def dodaj_walute(interaction: discord.Interaction, member: discord.Member,
 
         # Aktualizujemy bazę
         if result:
-            cursor.execute("UPDATE punkty SET doorcal = ? WHERE user_id = ?", (current + ilosc, member.id))
+            cursor.execute("UPDATE punkty SET doorcal = ? WHERE user_id = ?", (current + amount, member.id))
         else:
-            cursor.execute("INSERT INTO punkty (user_id, week_points, alltime_points, doorcal) VALUES (?, 0, 0, ?)", (member.id, ilosc))
+            cursor.execute("INSERT INTO punkty (user_id, week_points, alltime_points, doorcal) VALUES (?, 0, 0, ?)", (member.id, amount))
         conn.commit()
 
-    await interaction.response.send_message(f"✅ Dodano {ilosc} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Dodano {amount} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
 
 # --- Komenda administracyjna /usun_walute ---
 @bot.tree.command(name="usun_walute", description="Usuń Doorcal wybranemu użytkownikowi")
 @app_commands.checks.has_role("Administrator")
-async def usun_walute(interaction: discord.Interaction, member: discord.Member, ilosc: int):
-    if ilosc <= 0:
+async def usun_walute(interaction: discord.Interaction, member: discord.Member, amount: int):
+    if amount <= 0:
         await interaction.response.send_message("❌ Podaj dodatnią ilość Doorcal!", ephemeral=True)
         return
 
@@ -630,10 +631,10 @@ async def usun_walute(interaction: discord.Interaction, member: discord.Member, 
         result = cursor.fetchone()
         if result:
             current = result[0]
-            new_amount = max(current - ilosc, 0)
+            new_amount = max(current - amount, 0)
             cursor.execute("UPDATE punkty SET doorcal = ? WHERE user_id = ?", (new_amount, member.id))
             conn.commit()
-            await interaction.response.send_message(f"✅ Usunięto {ilosc} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
+            await interaction.response.send_message(f"✅ Usunięto {amount} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
         else:
             await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma Doorcal.", ephemeral=True)
 
@@ -646,16 +647,98 @@ async def pokaz_walute(interaction: discord.Interaction, member: discord.Member)
         result = cursor.fetchone()
         amount = result[0] if result else 0
 
-    await interaction.response
-    
+    await interaction.response.send_message(
+        f"{member.mention} ma **{amount} Doorcal**.", 
+        ephemeral=True
+
+@bot.tree.command(name="handel", description="wystaw swoją ofertę")
+async def handel(interaction: discord.Interaction, have: str, want: str, amount: int):
+    user_id = interaction.user.id
+    oferty = {}
+    async with db_lock:
+        cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        items = json.loads(result[0]) if result[0] else {}
+        doorcal = result[1] if result else 0
+    if have.lower() == "doorcal":
+        if doorcal < amount:
+            await interaction.response.send_message("❌ Nie masz tyle Doorcal!", ephemeral=True)
+            return
+    else:
+        if items.get(have, 0) < amount:
+            await interaction.response.send_message(f"❌ Nie masz {amount} x {have}!", ephemeral=True)
+            return
+    class Akceptuj(View):
+        def __init__(self):
+            super().__init__(timeout=None)
+            
+        @discord.ui.button(label="Akceptuj", style=discord.ButtonStyle.green)
+        async def accept(self, button: Button, button_interaction: discord.Interaction):
+            akceptor_id = button_interaction.user.id
+            if akceptor_id == user_id:
+                await button_interaction.response.send_message("❌ Nie możesz zaakceptować własnej oferty!", ephemeral=True)
+                return
+            
+            async with db_lock:
+                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id = ?", (akceptor_id,))
+                result = cursor.fetchone()
+                items_a = json.loads(result[0]) if result and result[0] else {}
+                doorcal_a = result[1] if result else 0
+                
+            if want.lower() == "doorcal":
+                if doorcal_a < amount:
+                    await button_interaction.response.send_message("❌ Nie masz tyle Doorcal!", ephemeral=True)
+                    return
+            else:
+                if items_a.get(want, 0) < amount:
+                    await button_interaction.response.send_message(f"❌ Nie masz {amount} x {want}!", ephemeral=True)
+                    return
+
+            # Wykonanie wymiany
+            async with db_lock:
+                # Aktualizacja oferenta
+                if have.lower() == "doorcal":
+                    doorcal_new = doorcal - amount
+                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, user_id))
+                else:
+                    items[have] -= amount
+                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items), user_id))
+
+                # Aktualizacja akceptora
+                if want.lower() == "doorcal":
+                    doorcal_new = doorcal_a - amount
+                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, akceptor_id))
+                else:
+                    items_a[want] -= amount
+                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items_a), akceptor_id))
+
+                # Dodanie zasobów w drugą stronę
+                if have.lower() == "doorcal":
+                    doorcal_new = result[1] + amount if result else amount
+                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, akceptor_id))
+                else:
+                    items_a[have] = items_a.get(have, 0) + amount
+                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items_a), akceptor_id))
+
+                if want.lower() == "doorcal":
+                    doorcal_new = result[1] + amount if result else amount
+                    cursor.execute("UPDATE punkty SET doorcal=? WHERE user_id=?", (doorcal_new, user_id))
+                else:
+                    items[want] = items.get(want, 0) + amount
+                    cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(items), user_id))
+
+                conn.commit()
+
+            # Edytuj wiadomość i zakończ handel
+            await button_interaction.message.edit(content=f"✅ Oferta od {interaction.user.mention} została zaakceptowana przez {button_interaction.user.mention}", view=None)
+            await button_interaction.response.send_message("✅ Wymiana zakończona!", ephemeral=True)
+
+    view = Akceptuj()
+    channel = discord.utils.get(interaction.guild.text_channels, name="handel")
+    if not channel:
+        channel = interaction.channel  # fallback
+
+    msg = await channel.send(f"💱 {interaction.user.mention} oferuje **{amount} x {have}** i want **{amount} x {want}**", view=view)
+    oferty[msg.id] = {"oferent": user_id, "have": have, "want": want, "amount": amount}
+    await interaction.response.send_message("✅ Twoja oferta została wystawiona!", ephemeral=True)
 bot.run(TOKEN)
-
-
-
-
-
-
-
-
-
-
