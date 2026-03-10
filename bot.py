@@ -43,7 +43,6 @@ def upload_db():
         content = base64.b64encode(f.read()).decode()
 
     url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
-    
     r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
     if r_get.status_code == 200:
         sha = r_get.json()["sha"]
@@ -65,7 +64,7 @@ def upload_db():
         logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {err}")
 
 def download_items():
-    url = "https://raw.githubusercontent.com/Paither/discord-bot-backup/main/items.json"
+    url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/items.json"
 
     r = requests.get(url)
     if r.status_code == 200:
@@ -589,6 +588,7 @@ async def inventory(ctx):
         
 # --- Start bota ---
 bot.run(TOKEN)
+
 
 
 
