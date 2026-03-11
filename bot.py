@@ -814,7 +814,7 @@ async def have_autocomplete(interaction: discord.Interaction, current: str):
     if "doorcal".startswith(current.lower()):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
     # <- zmiana tutaj:
-    await interaction.autocomplete(choices[:25])  # zamiast interaction.response.send_autocomplete
+    await interaction.response.send_autocomplete(choices[:25]) 
 
 @handel.autocomplete("want")
 async def want_autocomplete(interaction: discord.Interaction, current: str):
@@ -823,7 +823,7 @@ async def want_autocomplete(interaction: discord.Interaction, current: str):
     if "doorcal".startswith(current.lower()):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
     # <- zmiana tutaj:
-    await interaction.autocomplete(choices[:25])  # zamiast interaction.response.send_autocomplete
+    await interaction.response.send_autocomplete(choices[:25]) 
 
 @bot.tree.command(name="backup", description="Ręczny backup bazy danych", guild=discord.Object(id=1478885390407434455))
 async def backup(interaction: discord.Interaction):
@@ -841,3 +841,4 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
 
 bot.run(TOKEN)
+
