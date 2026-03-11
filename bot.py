@@ -10,6 +10,7 @@ import requests
 import logging
 import asyncio
 import json
+import atexit
 from datetime import datetime, timezone, time
 from zoneinfo import ZoneInfo
 from discord import app_commands
@@ -846,6 +847,7 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
     
 bot.run(TOKEN)
+
 
 
 
