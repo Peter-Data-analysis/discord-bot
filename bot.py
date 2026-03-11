@@ -152,7 +152,13 @@ bot = MyBot(command_prefix=None, intents=intents)
 @bot.event
 async def on_ready():
     logging.info(f"Zalogowano jako {bot.user}")
-    logging.info(f"Discord.py version: {discord.__version__}")
+    guild_id = 1478885390407434455
+    guild = discord.Object(id=guild_id)
+    try:
+        synced = await bot.tree.sync(guild=guild)
+        logging.info(f"✅ Zsynchronizowano {len(synced)} komend w guild {guild_id}")
+    except Exception as e:
+        logging.error(f"❌ Błąd sync: {e}")
 
 # --- Event: filtrowanie wiadomości ---
 @bot.event
@@ -875,6 +881,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Nie udało się pobrać backupu! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
