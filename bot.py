@@ -135,6 +135,7 @@ bot = MyBot(command_prefix=None, intents=intents)
 @bot.event
 async def on_ready():
     logging.info(f"Zalogowano jako {bot.user}")
+    logging.info(f"Discord.py version: {discord.__version__}")
 
 # --- Event: filtrowanie wiadomości ---
 @bot.event
@@ -841,4 +842,5 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
 
 bot.run(TOKEN)
+
 
