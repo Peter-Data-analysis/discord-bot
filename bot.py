@@ -119,17 +119,17 @@ async def on_ready():
     logging.info(f"Zalogowano jako {bot.user}")
     if not auto_backup.is_running():
         auto_backup.start()
-    # synchronizacja komend slash dla wszystkich serwerów
+    if not runda.is_running():
+        runda.start()
+    if not tygodniowy_ranking.is_running():
+        tygodniowy_ranking.start()
+
+async def sync_commands():
     try:
         synced = await bot.tree.sync(guild=discord.Object(id=1478885390407434455))
         logging.info(f"✅ Zsynchronizowano {len(synced)} komend slash")
     except Exception as e:
         logging.error(f"❌ Błąd przy sync komend: {e}")
-
-    if not runda.is_running():
-        runda.start()
-    if not tygodniowy_ranking.is_running():
-        tygodniowy_ranking.start()
 
 # --- Event: filtrowanie wiadomości ---
 @bot.event
@@ -385,22 +385,23 @@ async def drzwi(interaction: discord.Interaction, numer: int):
     if interaction.channel.name != CHANNEL_NAME:
         return
 
+    await interaction.response.defer(ephemeral=True)  # ✅ od razu potwierdzamy interakcję
+
     global stop_runda
     if stop_runda:
-        await interaction.response.send_message("⏸ Gra została wstrzymana!", ephemeral=True, delete_after=5)
+        await interaction.followup.send("⏸ Gra została wstrzymana!", ephemeral=True, delete_after=5)
         return
 
     if numer < 1 or numer > 5:
-        await interaction.response.send_message("❌ Wybierz drzwi od 1 do 5!", ephemeral=True, delete_after=5)
+        await interaction.followup.send("❌ Wybierz drzwi od 1 do 5!", ephemeral=True, delete_after=5)
         return
 
     if interaction.user.id in wybory:
-        await interaction.response.send_message("❌ Już wybrałeś drzwi w tej rundzie!", ephemeral=True, delete_after=5)
+        await interaction.followup.send("❌ Już wybrałeś drzwi w tej rundzie!", ephemeral=True, delete_after=5)
         return
 
     wybory[interaction.user.id] = numer
-    await interaction.response.send_message(f"{interaction.user.mention} wybrał drzwi **{numer}** 🚪", ephemeral=True, delete_after=5)
-
+    await interaction.followup.send(f"{interaction.user.mention} wybrał drzwi **{numer}** 🚪", ephemeral=True, delete_after=5)
 # --- Komenda /punkty ---
 @bot.tree.command(name="punkty", description="Sprawdź swoje punkty tygodniowe i all-time")
 async def punkty(interaction: discord.Interaction):
@@ -845,8 +846,10 @@ async def backup(interaction: discord.Interaction):
         upload_db()
 
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
-    
+
+bot.loop.create_task(sync_commands())
 bot.run(TOKEN)
+
 
 
 
