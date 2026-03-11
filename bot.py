@@ -112,24 +112,29 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.members = True
-bot = commands.Bot(command_prefix=None, intents=intents)
+
+class MyBot(commands.Bot):
+    async def setup_hook(self):
+        # synchronizacja komend
+        try:
+            synced = await self.tree.sync(guild=discord.Object(id=1478885390407434455))
+            logging.info(f"✅ Zsynchronizowano {len(synced)} komend slash")
+        except Exception as e:
+            logging.error(f"❌ Błąd przy sync komend: {e}")
+
+        # uruchomienie pętli/loopów
+        if not auto_backup.is_running():
+            auto_backup.start()
+        if not runda.is_running():
+            runda.start()
+        if not tygodniowy_ranking.is_running():
+            tygodniowy_ranking.start()
+            
+bot = MyBot(command_prefix=None, intents=intents)
 
 @bot.event
 async def on_ready():
     logging.info(f"Zalogowano jako {bot.user}")
-    if not auto_backup.is_running():
-        auto_backup.start()
-    if not runda.is_running():
-        runda.start()
-    if not tygodniowy_ranking.is_running():
-        tygodniowy_ranking.start()
-
-async def sync_commands():
-    try:
-        synced = await bot.tree.sync(guild=discord.Object(id=1478885390407434455))
-        logging.info(f"✅ Zsynchronizowano {len(synced)} komend slash")
-    except Exception as e:
-        logging.error(f"❌ Błąd przy sync komend: {e}")
 
 # --- Event: filtrowanie wiadomości ---
 @bot.event
@@ -847,8 +852,8 @@ async def backup(interaction: discord.Interaction):
 
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
 
-bot.loop.create_task(sync_commands())
 bot.run(TOKEN)
+
 
 
 
