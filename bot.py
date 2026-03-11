@@ -387,19 +387,19 @@ async def drzwi(interaction: discord.Interaction, numer: int):
 
     global stop_runda
     if stop_runda:
-        await interaction.response.send_message("⏸ Gra została wstrzymana!", ephemeral=True)
+        await interaction.response.send_message("⏸ Gra została wstrzymana!", ephemeral=True, delete_after=5)
         return
 
     if numer < 1 or numer > 5:
-        await interaction.response.send_message("❌ Wybierz drzwi od 1 do 5!", ephemeral=True)
+        await interaction.response.send_message("❌ Wybierz drzwi od 1 do 5!", ephemeral=True, delete_after=5)
         return
 
     if interaction.user.id in wybory:
-        await interaction.response.send_message("❌ Już wybrałeś drzwi w tej rundzie!", ephemeral=True)
+        await interaction.response.send_message("❌ Już wybrałeś drzwi w tej rundzie!", ephemeral=True, delete_after=5)
         return
 
     wybory[interaction.user.id] = numer
-    await interaction.response.send_message(f"{interaction.user.mention} wybrał drzwi **{numer}** 🚪", ephemeral=True)
+    await interaction.response.send_message(f"{interaction.user.mention} wybrał drzwi **{numer}** 🚪", ephemeral=True, delete_after=5)
 
 # --- Komenda /punkty ---
 @bot.tree.command(name="punkty", description="Sprawdź swoje punkty tygodniowe i all-time")
@@ -662,21 +662,21 @@ async def pokaz_walute(interaction: discord.Interaction, member: discord.Member)
 @bot.tree.command(name="waluta", description="Sprawdź ilość waluty")
 async def waluta(interaction: discord.Interaction):
     if interaction.channel.name != CHANNEL_NAMEX:
+        await interaction.response.send_message("❌ Ta komenda działa tylko w kanale gry.", ephemeral=True)
         return
 
     user_id = interaction.user.id
     async with db_lock:
         cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()  # <-- pobieramy całą krotkę lub None
+        result = cursor.fetchone()
         
-    if result:  
-        doorcal = result[0]  # <-- bierzemy pierwszą kolumnę
-    else:
-        doorcal = 0  # <-- użytkownik nie ma jeszcze waluty
-    await interaction.response.send_message(f"{interaction.user.mention}, masz **{doorcal} Doorcal**")
-    
+    doorcal = result[0] if result else 0
+    await interaction.response.send_message(f"{interaction.user.mention}, masz **{doorcal} Doorcal**", ephemeral=True)
+
 # --- Komenda handel z różnymi ilościami ---
-@app_commands.command(name="handel", description="Wystaw ofertę handlu")
+
+
+@bot.tree.command(name="handel", description="Wystaw ofertę handlu")
 @app_commands.describe(
     have="Co oferujesz",
     have_amount="Ile jednostek oferujesz",
@@ -685,7 +685,7 @@ async def waluta(interaction: discord.Interaction):
 )
 async def handel(interaction: discord.Interaction, have: str, have_amount: int, want: str, want_amount: int):
     if interaction.channel.name != HANDEL_CHANNEL:
-        await interaction.response.send_message("❌ Tej komendy można używać tylko w kanale handlu!", ephemeral=True)
+        await interaction.response.send_message(f"❌ Ta komenda działa tylko w kanale {HANDEL_CHANNEL}", ephemeral=True)
         return
 
     if have_amount <= 0 or want_amount <= 0:
@@ -847,6 +847,7 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
     
 bot.run(TOKEN)
+
 
 
 
