@@ -785,7 +785,18 @@ async def handel(interaction: discord.Interaction, have: str, want: str, amount:
     }
 
     await interaction.response.send_message("✅ Oferta została wystawiona!", ephemeral=True)
+    
+@bot.tree.command(name="sync_commands", description="Odśwież wszystkie komendy slash na serwerze")
+@app_commands.checks.has_role("Administrator")  # opcjonalnie, tylko dla adminów
+async def sync_commands(interaction: discord.Interaction):
+    try:
+        synced = await bot.tree.sync(guild=interaction.guild)
+        await interaction.response.send_message(f"✅ Zsynchronizowano {len(synced)} komend na tym serwerze.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Błąd przy synchronizacji: {e}", ephemeral=True)
+        
 bot.run(TOKEN)
+
 
 
 
