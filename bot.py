@@ -98,17 +98,6 @@ load_items()
 conn = sqlite3.connect("luckydoors.db", check_same_thread=False)
 conn.execute("PRAGMA journal_mode=WAL;")
 cursor = conn.cursor()
-cursor.execute("PRAGMA table_info(punkty)")
-kolumny = [kol[1] for kol in cursor.fetchall()]
-if "week_points" not in kolumny:
-    cursor.execute("ALTER TABLE punkty ADD COLUMN week_points INTEGER DEFAULT 0")
-if "alltime_points" not in kolumny:
-    cursor.execute("ALTER TABLE punkty ADD COLUMN alltime_points INTEGER DEFAULT 0")
-if "items" not in kolumny:
-    cursor.execute("ALTER TABLE punkty ADD COLUMN items TEXT DEFAULT '{}'")
-if "doorcal" not in kolumny:
-    cursor.execute("ALTER TABLE punkty ADD COLUMN doorcal INTEGER DEFAULT 0")
-conn.commit()
 
 poprawne_drzwi = None
 pulapka_drzwi = None
@@ -127,7 +116,8 @@ bot = commands.Bot(command_prefix=None, intents=intents)
 @bot.event
 async def on_ready():
     logging.info(f"Zalogowano jako {bot.user}")
-
+    if not auto_backup.is_running():
+        auto_backup.start()
     # synchronizacja komend slash dla wszystkich serwerów
     try:
         synced = await bot.tree.sync(guild=discord.Object(id=1478885390407434455))
@@ -199,6 +189,13 @@ def drop_item(user_id, items_json):
 
         return chosen_item
     return None
+    
+@tasks.loop(hours=24)
+async def auto_backup():
+    async with db_lock:
+        conn.commit()
+        upload_db()
+        logging.info("💾 Automatyczny backup wykonany")
 
 # --- Pętla rundy ---
 @tasks.loop(minutes=5)
@@ -273,7 +270,6 @@ async def runda():
                         wynik += f"{user_mention} — ❌ pudło\n"
             conn.commit()
         await channel.send(wynik, delete_after=60)
-        upload_db()
 
     # --- Losowanie rundy ---
     jackpot_runda = random.random() < 0.005
@@ -335,6 +331,12 @@ Wpisz:
     await channel.send(tekst, delete_after=299)
     if pulapka_runda:
         await channel.send("""🪤 Czuję również jakieś niebezpieczeństwo... Bądź ostrożny!""", delete_after=299)
+def shutdown_backup():
+    conn.commit()
+    upload_db()
+    print("💾 Backup przy zamykaniu bota")
+
+atexit.register(shutdown_backup)
     
 @tasks.loop(time=time(hour=23, minute=59, tzinfo=ZoneInfo("Europe/Warsaw")))
 async def tygodniowy_ranking():
@@ -409,9 +411,9 @@ async def punkty(interaction: discord.Interaction):
         result = cursor.fetchone()
     if result:
         week, alltime = result
-        await interaction.response.send_message(f"{interaction.user.mention}, masz **{week} punktów tygodniowych** i **{alltime} punktów all-time** 🎉")
+        await interaction.response.send_message(f"{interaction.user.mention}, masz **{week} punktów tygodniowych** i **{alltime} punktów all-time** 🎉", ephemeral=True)
     else:
-        await interaction.response.send_message(f"{interaction.user.mention}, jeszcze nie masz punktów. Zacznij grać!")
+        await interaction.response.send_message(f"{interaction.user.mention}, jeszcze nie masz punktów. Zacznij grać!", ephemeral=True)
 
 # --- Komenda /top ---
 @bot.tree.command(name="top", description="Pokaż TOP 20 graczy all-time")
@@ -549,7 +551,9 @@ async def runda_start(interaction: discord.Interaction):
 
 # --- Komenda /sklep ---
 @bot.tree.command(name="sklep", description="Pokaż dostępne przedmioty w sklepie")
+@app_commands.checks.has_role("Administrator")
 async def sklep(interaction: discord.Interaction):
+    
     msg = "🛒 **SKLEP LUCKY DOORS**\n\n"
     for key, item in items_data.items():
         msg += f"**{item['name']}** — {item['cena']} pkt\n{item['opis']}\n\n"
@@ -569,12 +573,12 @@ async def itemy(interaction: discord.Interaction):
         items = {}
 
     if not items:
-        await interaction.response.send_message(f"{interaction.user.mention}, nie masz jeszcze żadnych przedmiotów.")
+        await interaction.response.send_message(f"{interaction.user.mention}, nie masz jeszcze żadnych przedmiotów.", ephemeral=True)
     else:
         tekst = f"{interaction.user.mention}, oto Twoje przedmioty:\n"
         for item, amount in items.items():
             tekst += f"- {item}: {amount}\n"
-        await interaction.response.send_message(tekst)
+        await interaction.response.send_message(tekst, ephemeral=True)
 
 # --- Komenda administracyjna /przedmiot_dodaj ---
 @bot.tree.command(name="przedmiot_dodaj", description="Dodaj określony przedmiot użytkownikowi")
@@ -825,8 +829,24 @@ async def want_autocomplete(interaction: discord.Interaction, current: str):
     if "doorcal".startswith(current.lower()):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
     await interaction.response.send_autocomplete(choices[:25])
-        
+
+@bot.tree.command(name="backup", description="Ręczny backup bazy danych")
+async def backup(interaction: discord.Interaction):
+
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ Tylko admin może zrobić backup.", ephemeral=True)
+        return
+
+    await interaction.response.send_message("💾 Tworzę backup...", ephemeral=True)
+
+    async with db_lock:
+        conn.commit()
+        upload_db()
+
+    await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
+    
 bot.run(TOKEN)
+
 
 
 
