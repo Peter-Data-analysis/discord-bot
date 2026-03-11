@@ -385,30 +385,14 @@ async def tygodniowy_ranking():
     upload_db()
     
 # --- Komenda /drzwi ---
-@bot.tree.command(name="drzwi", description="Wybierz drzwi w aktualnej rundzie gry")
+@bot.tree.command(name="drzwi", description="Wybierz drzwi w aktualnej rundzie gry", guild=discord.Object(id=1478885390407434455))
 async def drzwi(interaction: discord.Interaction, numer: int):
     if interaction.channel.name != CHANNEL_NAME:
         return
-
-    await interaction.response.defer(ephemeral=True)  # ✅ od razu potwierdzamy interakcję
-
-    global stop_runda
-    if stop_runda:
-        await interaction.followup.send("⏸ Gra została wstrzymana!", ephemeral=True, delete_after=5)
-        return
-
-    if numer < 1 or numer > 5:
-        await interaction.followup.send("❌ Wybierz drzwi od 1 do 5!", ephemeral=True, delete_after=5)
-        return
-
-    if interaction.user.id in wybory:
-        await interaction.followup.send("❌ Już wybrałeś drzwi w tej rundzie!", ephemeral=True, delete_after=5)
-        return
-
     wybory[interaction.user.id] = numer
-    await interaction.followup.send(f"{interaction.user.mention} wybrał drzwi **{numer}** 🚪", ephemeral=True, delete_after=5)
+
 # --- Komenda /punkty ---
-@bot.tree.command(name="punkty", description="Sprawdź swoje punkty tygodniowe i all-time")
+@bot.tree.command(name="punkty", description="Sprawdź swoje punkty tygodniowe i all-time", guild=discord.Object(id=1478885390407434455))
 async def punkty(interaction: discord.Interaction):
     if interaction.channel.name != CHANNEL_NAMEX:
         return
@@ -423,7 +407,7 @@ async def punkty(interaction: discord.Interaction):
         await interaction.response.send_message(f"{interaction.user.mention}, jeszcze nie masz punktów. Zacznij grać!", ephemeral=True)
 
 # --- Komenda /top ---
-@bot.tree.command(name="top", description="Pokaż TOP 20 graczy all-time")
+@bot.tree.command(name="top", description="Pokaż TOP 20 graczy all-time", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def top(interaction: discord.Interaction):
     async with db_lock:
@@ -443,7 +427,7 @@ async def top(interaction: discord.Interaction):
     await interaction.response.send_message(msg)
 
 # --- Komenda /czas_ranking ---
-@bot.tree.command(name="czas_ranking", description="Sprawdź, za ile czasu rozpocznie się kolejny ranking tygodniowy")
+@bot.tree.command(name="czas_ranking", description="Sprawdź, za ile czasu rozpocznie się kolejny ranking tygodniowy", guild=discord.Object(id=1478885390407434455))
 async def czas_ranking(interaction: discord.Interaction):
     if not tygodniowy_ranking.is_running():
         await interaction.response.send_message("⏳ Ranking tygodniowy nie jest uruchomiony.")
@@ -458,7 +442,7 @@ async def czas_ranking(interaction: discord.Interaction):
     await interaction.response.send_message(f"⏰ Kolejny ranking tygodniowy rozpocznie się za {hours}h {minutes}m {seconds}s.")
 
 # --- Komendy administracyjne /punkty_dodaj i /punkty_usun ---
-@bot.tree.command(name="punkty_dodaj", description="Dodaj punkty wybranemu użytkownikowi")
+@bot.tree.command(name="punkty_dodaj", description="Dodaj punkty wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def punkty_dodaj(interaction: discord.Interaction, member: discord.Member, amount: int):
     if amount <= 0:
@@ -476,7 +460,7 @@ async def punkty_dodaj(interaction: discord.Interaction, member: discord.Member,
         conn.commit()
     await interaction.response.send_message(f"✅ Dodano {amount} punktów użytkownikowi {member.mention}.")
 
-@bot.tree.command(name="punkty_usun", description="Usuń punkty wybranemu użytkownikowi")
+@bot.tree.command(name="punkty_usun", description="Usuń punkty wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def punkty_usun(interaction: discord.Interaction, member: discord.Member, amount: int):
     if amount <= 0:
@@ -498,7 +482,7 @@ async def punkty_usun(interaction: discord.Interaction, member: discord.Member, 
             await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma punktów w bazie.")
 
 # --- Komenda /usun_dane ---
-@bot.tree.command(name="usun_dane", description="Usuń wszystkie dane użytkownika z bazy")
+@bot.tree.command(name="usun_dane", description="Usuń wszystkie dane użytkownika z bazy", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def usun_dane(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
@@ -507,7 +491,7 @@ async def usun_dane(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.send_message(f"🗑 Dane użytkownika {member.mention} zostały usunięte z bazy.")
 
 # --- Komenda /punkty_reset ---
-@bot.tree.command(name="punkty_reset", description="Zresetuj punkty tygodniowe wszystkich użytkowników")
+@bot.tree.command(name="punkty_reset", description="Zresetuj punkty tygodniowe wszystkich użytkowników", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def punkty_reset(interaction: discord.Interaction):
     async with db_lock:
@@ -516,7 +500,7 @@ async def punkty_reset(interaction: discord.Interaction):
     await interaction.response.send_message("♻️ Punkty tygodniowe wszystkich użytkowników zostały zresetowane.")
 
 # --- Komenda /punkty_pokaz ---
-@bot.tree.command(name="punkty_pokaz", description="Pokaż punkty wybranego użytkownika")
+@bot.tree.command(name="punkty_pokaz", description="Pokaż punkty wybranego użytkownika", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def punkty_pokaz(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
@@ -529,7 +513,7 @@ async def punkty_pokaz(interaction: discord.Interaction, member: discord.Member)
         await interaction.response.send_message(f"{member.mention} nie ma punktów w bazie.")
 
 # --- Komendy administracyjne: runda_stop / runda_start ---
-@bot.tree.command(name="runda_stop", description="Zatrzymaj aktualną rundę gry")
+@bot.tree.command(name="runda_stop", description="Zatrzymaj aktualną rundę gry", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def runda_stop(interaction: discord.Interaction):
     global stop_runda, stop_msg
@@ -538,7 +522,7 @@ async def runda_stop(interaction: discord.Interaction):
     if channel:
         stop_msg = await channel.send("⏹ Aktualna runda została zatrzymana. Kolejne rundy nie będą się rozpoczynać")
 
-@bot.tree.command(name="runda_start", description="Wznów grę po zatrzymaniu rundy")
+@bot.tree.command(name="runda_start", description="Wznów grę po zatrzymaniu rundy", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def runda_start(interaction: discord.Interaction):
     global stop_runda, stop_msg
@@ -557,7 +541,7 @@ async def runda_start(interaction: discord.Interaction):
         await interaction.response.send_message("❌ Gra już działa.", ephemeral=True)
 
 # --- Komenda /sklep ---
-@bot.tree.command(name="sklep", description="Pokaż dostępne przedmioty w sklepie")
+@bot.tree.command(name="sklep", description="Pokaż dostępne przedmioty w sklepie", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def sklep(interaction: discord.Interaction):
     
@@ -567,7 +551,7 @@ async def sklep(interaction: discord.Interaction):
     await interaction.response.send_message(msg)
 
 # --- Komenda /inventory ---
-@bot.tree.command(name="itemy", description="Pokaż swoje przedmioty")
+@bot.tree.command(name="itemy", description="Pokaż swoje przedmioty", guild=discord.Object(id=1478885390407434455))
 async def itemy(interaction: discord.Interaction):
     user_id = interaction.user.id
     async with db_lock:
@@ -588,7 +572,7 @@ async def itemy(interaction: discord.Interaction):
         await interaction.response.send_message(tekst, ephemeral=True)
 
 # --- Komenda administracyjna /przedmiot_dodaj ---
-@bot.tree.command(name="przedmiot_dodaj", description="Dodaj określony przedmiot użytkownikowi")
+@bot.tree.command(name="przedmiot_dodaj", description="Dodaj określony przedmiot użytkownikowi", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Member, item_key: str, amount: int):
     if amount <= 0:
@@ -610,7 +594,7 @@ async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Memb
 
     await interaction.response.send_message(f"✅ Dodano **{amount} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
 
-@bot.tree.command(name="dodaj_walute", description="Dodaj Doorcal wybranemu użytkownikowi")
+@bot.tree.command(name="dodaj_walute", description="Dodaj Doorcal wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def dodaj_walute(interaction: discord.Interaction, member: discord.Member, amount: int):
     if amount <= 0:
@@ -633,7 +617,7 @@ async def dodaj_walute(interaction: discord.Interaction, member: discord.Member,
     await interaction.response.send_message(f"✅ Dodano {amount} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
 
 # --- Komenda administracyjna /usun_walute ---
-@bot.tree.command(name="usun_walute", description="Usuń Doorcal wybranemu użytkownikowi")
+@bot.tree.command(name="usun_walute", description="Usuń Doorcal wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def usun_walute(interaction: discord.Interaction, member: discord.Member, amount: int):
     if amount <= 0:
@@ -653,7 +637,7 @@ async def usun_walute(interaction: discord.Interaction, member: discord.Member, 
             await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma Doorcal.", ephemeral=True)
 
 # --- Komenda /pokaz_walute ---
-@bot.tree.command(name="pokaz_walute", description="Pokaż ilość Doorcal wybranego użytkownika")
+@bot.tree.command(name="pokaz_walute", description="Pokaż ilość Doorcal wybranego użytkownika", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
 async def pokaz_walute(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
@@ -665,7 +649,7 @@ async def pokaz_walute(interaction: discord.Interaction, member: discord.Member)
         f"{member.mention} ma **{amount} Doorcal**.", 
         ephemeral=True)
 
-@bot.tree.command(name="waluta", description="Sprawdź ilość waluty")
+@bot.tree.command(name="waluta", description="Sprawdź ilość waluty", guild=discord.Object(id=1478885390407434455))
 async def waluta(interaction: discord.Interaction):
     if interaction.channel.name != CHANNEL_NAMEX:
         await interaction.response.send_message("❌ Ta komenda działa tylko w kanale gry.", ephemeral=True)
@@ -682,7 +666,7 @@ async def waluta(interaction: discord.Interaction):
 # --- Komenda handel z różnymi ilościami ---
 
 
-@bot.tree.command(name="handel", description="Wystaw ofertę handlu")
+@bot.tree.command(name="handel", description="Wystaw ofertę handlu", guild=discord.Object(id=1478885390407434455))
 @app_commands.describe(
     have="Co oferujesz",
     have_amount="Ile jednostek oferujesz",
@@ -837,7 +821,7 @@ async def want_autocomplete(interaction: discord.Interaction, current: str):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
     await interaction.response.send_autocomplete(choices[:25])
 
-@bot.tree.command(name="backup", description="Ręczny backup bazy danych")
+@bot.tree.command(name="backup", description="Ręczny backup bazy danych", guild=discord.Object(id=1478885390407434455))
 async def backup(interaction: discord.Interaction):
 
     if not interaction.user.guild_permissions.administrator:
@@ -853,6 +837,7 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
