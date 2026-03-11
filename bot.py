@@ -117,7 +117,7 @@ class MyBot(commands.Bot):
     async def setup_hook(self):
         # synchronizacja komend
         try:
-            synced = await self.tree.sync(guild=discord.Object(id=1478885390407434455))
+            synced = await self.tree.sync())
             logging.info(f"✅ Zsynchronizowano {len(synced)} komend slash")
         except Exception as e:
             logging.error(f"❌ Błąd przy sync komend: {e}")
@@ -837,6 +837,7 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
