@@ -654,12 +654,22 @@ async def pokaz_walute(interaction: discord.Interaction, member: discord.Member)
         f"{member.mention} ma **{amount} Doorcal**.", 
         ephemeral=True)
 
-@bot.tree.command(name="handel", description="Wystaw ofertę handlu")
-@app_commands.describe(
-    have="What you have",
-    want="what you want",
-    amount="amount"
-)
+@bot.tree.command(name="waluta", description="Sprawdź ilość waluty")
+async def waluta(interaction: discord.Interaction):
+    if interaction.channel.name != CHANNEL_NAMEX:
+        return
+
+    user_id = interaction.user.id
+    async with db_lock:
+        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()  # <-- pobieramy całą krotkę lub None
+        
+    if result:  
+        doorcal = result[0]  # <-- bierzemy pierwszą kolumnę
+    else:
+        doorcal = 0  # <-- użytkownik nie ma jeszcze waluty
+    await interaction.response.send_message(f"{interaction.user.mention}, masz **{doorcal} Doorcal**")
+    
 # --- Komenda handel z różnymi ilościami ---
 @app_commands.command(name="handel", description="Wystaw ofertę handlu")
 @app_commands.describe(
@@ -817,6 +827,7 @@ async def want_autocomplete(interaction: discord.Interaction, current: str):
     await interaction.response.send_autocomplete(choices[:25])
         
 bot.run(TOKEN)
+
 
 
 
