@@ -35,39 +35,56 @@ oferty = {}
 # --- Funkcja backupu bazy na GitHub ---
 def download_db():
     url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
-    r = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-    if r.status_code == 200:
-        content = base64.b64decode(r.json()["content"])
-        with open("luckydoors.db", "wb") as f:
-            f.write(content)
-        logging.info("✅ Pobrano backup bazy")
-    else:
-        logging.warning("⚠ Nie znaleziono backupu bazy, tworzę nową")
+    try:
+        r = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+        if r.status_code == 200:
+            content = base64.b64decode(r.json()["content"])
+            with open("luckydoors.db", "wb") as f:
+                f.write(content)
+            logging.info("✅ Pobrano backup bazy z GitHub")
+        else:
+            logging.warning("⚠ Nie znaleziono backupu bazy, zostanie utworzona nowa")
+    except Exception as e:
+        logging.error(f"❌ Błąd przy pobieraniu backupu: {e}")
 
-def upload_db():
+def upload_db(max_retries: int = 3, delay: float = 2.0):
+    """
+    Uploaduje lokalną bazę SQLite na GitHub.
+    max_retries – ile razy próbować w razie błędu
+    delay – czas w sekundach między próbami
+    """
     with open("luckydoors.db", "rb") as f:
         content = base64.b64encode(f.read()).decode()
 
     url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
-    r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-    if r_get.status_code == 200:
-        sha = r_get.json()["sha"]
-    else:
-        sha = None
 
-    data = {"message": "backup database", "content": content}
-    if sha:
-        data["sha"] = sha
-
-    r = requests.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-    if r.status_code in [200, 201]:
-        logging.info("✅ Baza wysłana do repo backupowego")
-    else:
+    for attempt in range(1, max_retries + 1):
         try:
-            err = r.json()
-        except:
-            err = r.text
-        logging.error(f"❌ Błąd przy wysyłaniu bazy: {r.status_code} {err}")
+            # pobranie sha jeśli plik już istnieje
+            r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+            sha = r_get.json()["sha"] if r_get.status_code == 200 else None
+
+            data = {"message": "backup database", "content": content}
+            if sha:
+                data["sha"] = sha
+
+            r_put = requests.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+            if r_put.status_code in [200, 201]:
+                logging.info("✅ Baza wysłana na GitHub")
+                return True
+            else:
+                try:
+                    err = r_put.json()
+                except:
+                    err = r_put.text
+                logging.warning(f"⚠ Próba {attempt}: Błąd przy wysyłaniu bazy: {r_put.status_code} {err}")
+        except Exception as e:
+            logging.warning(f"⚠ Próba {attempt}: wyjątek przy upload: {e}")
+
+        time.sleep(delay)
+
+    logging.error("❌ Nie udało się wysłać bazy po kilku próbach")
+    return False
 
 def download_items():
     url = "https://api.github.com/repos/Paither/discord-bot-backup/contents/items.json"
@@ -826,7 +843,6 @@ async def want_autocomplete(interaction: discord.Interaction, current: str):
 
 @bot.tree.command(name="backup", description="Ręczny backup bazy danych", guild=discord.Object(id=1478885390407434455))
 async def backup(interaction: discord.Interaction):
-
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ Tylko admin może zrobić backup.", ephemeral=True)
         return
@@ -834,12 +850,32 @@ async def backup(interaction: discord.Interaction):
     await interaction.response.send_message("💾 Tworzę backup...", ephemeral=True)
 
     async with db_lock:
-        conn.commit()
-        upload_db()
+        conn.commit()        # zapis lokalnych zmian
+        result = await asyncio.to_thread(upload_db)  # upload bez blokowania event loop
 
-    await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
+    if result:
+        await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
+    else:
+        await interaction.followup.send("❌ Backup NIE powiódł się. Sprawdź logi!", ephemeral=True)
+        
+@bot.tree.command(
+    name="download_backup", 
+    description="Pobierz najnowszy backup bazy danych z GitHub", 
+    guild=discord.Object(id=1478885390407434455)
+)
+@app_commands.checks.has_role("Administrator")
+async def download_backup(interaction: discord.Interaction):
+    await interaction.response.send_message("⬇️ Pobieram backup z GitHub...", ephemeral=True)
+    try:
+        # Pobranie backupu w osobnym wątku, żeby nie blokować event loop
+        result = await asyncio.to_thread(download_db)
+        await interaction.followup.send("✅ Backup pobrany i zapisany lokalnie!", ephemeral=True)
+    except Exception as e:
+        logging.error(f"❌ Błąd przy pobieraniu backupu: {e}")
+        await interaction.followup.send(f"❌ Nie udało się pobrać backupu! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
