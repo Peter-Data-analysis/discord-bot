@@ -389,11 +389,11 @@ async def tygodniowy_ranking():
 @bot.tree.command(name="drzwi", description="Wybierz drzwi w aktualnej rundzie gry", guild=discord.Object(id=1478885390407434455))
 async def drzwi(interaction: discord.Interaction, numer: int):
     if interaction.channel.name != CHANNEL_NAME:
-        await interaction.response.defer(ephemeral=True)
         return
-    await interaction.response.defer(ephemeral=True)
     wybory[interaction.user.id] = numer
-
+    # odpowiedź „ephemeral” czyli tylko dla użytkownika, niewidoczna publicznie
+    await interaction.response.send_message("✅ Twój wybór został zapisany!", ephemeral=True, delete_after=3)
+    
 # --- Komenda /punkty ---
 @bot.tree.command(name="punkty", description="Sprawdź swoje punkty tygodniowe i all-time", guild=discord.Object(id=1478885390407434455))
 async def punkty(interaction: discord.Interaction):
@@ -840,6 +840,7 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
