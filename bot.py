@@ -388,7 +388,9 @@ async def tygodniowy_ranking():
 @bot.tree.command(name="drzwi", description="Wybierz drzwi w aktualnej rundzie gry", guild=discord.Object(id=1478885390407434455))
 async def drzwi(interaction: discord.Interaction, numer: int):
     if interaction.channel.name != CHANNEL_NAME:
+        await interaction.response.defer(ephemeral=True)
         return
+    await interaction.response.defer(ephemeral=True)
     wybory[interaction.user.id] = numer
 
 # --- Komenda /punkty ---
@@ -811,7 +813,8 @@ async def have_autocomplete(interaction: discord.Interaction, current: str):
                for key, item in items_data.items() if current.lower() in key.lower()]
     if "doorcal".startswith(current.lower()):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
-    await interaction.response.send_autocomplete(choices[:25])
+    # <- zmiana tutaj:
+    await interaction.autocomplete(choices[:25])  # zamiast interaction.response.send_autocomplete
 
 @handel.autocomplete("want")
 async def want_autocomplete(interaction: discord.Interaction, current: str):
@@ -819,7 +822,8 @@ async def want_autocomplete(interaction: discord.Interaction, current: str):
                for key, item in items_data.items() if current.lower() in key.lower()]
     if "doorcal".startswith(current.lower()):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
-    await interaction.response.send_autocomplete(choices[:25])
+    # <- zmiana tutaj:
+    await interaction.autocomplete(choices[:25])  # zamiast interaction.response.send_autocomplete
 
 @bot.tree.command(name="backup", description="Ręczny backup bazy danych", guild=discord.Object(id=1478885390407434455))
 async def backup(interaction: discord.Interaction):
@@ -837,18 +841,3 @@ async def backup(interaction: discord.Interaction):
     await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
 
 bot.run(TOKEN)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
