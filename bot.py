@@ -429,7 +429,13 @@ Write:
 
 ⏳ Time: 5 minutes"""
 
-    await channel.send(text, delete_after=299)
+    try:
+        await channel.send(text, delete_after=299)
+    except discord.DiscordServerError as e:
+        logger.warning(f"Discord server error, message not sent: {e}")
+    except discord.HTTPException as e:
+        logger.error(f"HTTP error sending message: {e}")
+        
     if trap_round:
         await channel.send("""you need to sharpen your intuition""", delete_after=299)
 
@@ -1291,6 +1297,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
