@@ -29,7 +29,6 @@ db_lock = asyncio.Lock()
 keep_alive()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-stop_round = False
 items_data = {}
 listings = {}
 
@@ -127,7 +126,7 @@ correct_door = None
 trap_door = None
 choices = {}
 bonus_round = False
-trap_door= False
+trap_round = False
 jackpot_round = False
 
 intents = discord.Intents.default()
@@ -175,9 +174,64 @@ async def on_member_remove(member):
         cursor.execute("DELETE FROM pouch WHERE user_id = ?", (user_id,))
         conn.commit()
     logger.info(f"🗑 User points of {member.name} ({user_id}) deleted from the database")
+# --- obsługa kliknięcia przycisku ---
+
+@bot.event
+async def on_button_click(interaction):
+    if interaction.custom_id.startswith("open_chest_"):
+        user_id = int(interaction.custom_id.split("_")[-1])
+        if interaction.user.id != user_id:
+            await interaction.respond(type=6)  # ignorujemy kliknięcia innych
+            return
+
+        # sprawdzamy, czy użytkownik ma złoty klucz
+        cursor.execute("SELECT items FROM pouch WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        if result and result[0]:
+            user_items = json.loads(result[0])
+        else:
+            user_items = {}
+
+        if user_items.get("golden_key", 0) > 0:
+            # odejmujemy klucz
+            user_items["golden_key"] -= 1
+            if user_items["golden_key"] == 0:
+                del user_items["golden_key"]
+            cursor.execute("UPDATE pouch SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
+            conn.commit()
+
+            # losowe Doorcal 40-80
+            doorcal_reward = random.randint(40, 80)
+            cursor.execute("""
+                INSERT INTO pouch (user_id, doorcal)
+                VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                doorcal = doorcal + ?
+            """, (user_id, doorcal_reward, doorcal_reward))
+            conn.commit()
+
+            await interaction.respond(content=f"🎉 You opened the chest and gained +{doorcal_reward} Doorcal!")
+        else:
+            await interaction.respond(content="❌ You don't have a Golden Key!")
 
 # --- Drop chances depend of the formula---
 def drop_item(user_id, items_json):
+    # --- Szansa na drop ---
+    roll = random.random()
+    if roll < 0.01:
+        rarity_roll = "legendary"
+    elif roll < 0.04:
+        rarity_roll = "epic"
+    elif roll < 0.10:
+        rarity_roll = "rare"
+    elif roll < 0.21:
+        rarity_roll = "uncommon"
+    elif roll < 0.41:
+        rarity_roll = "common"
+    else:
+        return None  # brak dropa
+
+    # --- Szanse dla poszczególnych rzadkości ---
     drop_chances = {
         "common": 0.15,
         "uncommon": 0.10,
@@ -186,33 +240,32 @@ def drop_item(user_id, items_json):
         "legendary": 0.01
     }
 
-    drop_candidates = []
+    # --- Wybór kandydatów do dropa ---
+    drop_candidates = [
+        key for key, data in items_json.items()
+        if data.get("rarity", "common").lower() == rarity_roll
+    ]
 
-    for key, data in items_json.items():
-        rarity = data.get("rarity", "common").lower()
-        chance = drop_chances.get(rarity, 0)
-        if random.random() < chance:
-            drop_candidates.append(key)
+    if not drop_candidates:
+        return None  # brak itemów w tej rzadkości
 
-    if drop_candidates:
-        chosen_item = random.choice(drop_candidates)
+    # --- Losowy wybór przedmiotu ---
+    chosen_item = random.choice(drop_candidates)
 
-        # Pobranie aktualnych przedmiotów użytkownika
-        cursor.execute("SELECT items FROM pouch WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-        if result and result[0]:
-            user_items = json.loads(result[0])
-        else:
-            user_items = {}
+    # --- Pobranie aktualnych przedmiotów użytkownika ---
+    cursor.execute("SELECT items FROM pouch WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if result and result[0]:
+        user_items = json.loads(result[0])
+    else:
+        user_items = {}
 
-        # add items
-        user_items[chosen_item] = user_items.get(chosen_item, 0) + 1
-        cursor.execute("UPDATE pouch SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
-        conn.commit()
+    # --- Dodanie przedmiotu ---
+    user_items[chosen_item] = user_items.get(chosen_item, 0) + 1
+    cursor.execute("UPDATE pouch SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
+    conn.commit()
 
-        return chosen_item
-    return None
-    
+    return chosen_item
 @tasks.loop(hours=24)
 async def auto_backup():
     async with db_lock:
@@ -223,16 +276,30 @@ async def auto_backup():
 # --- rounds loop ---
 @tasks.loop(minutes=5)
 async def round():
+    chest_chance = 0.1
+    chest_door = None
+    chest_winner = None
     global correct_door, choices, trap_door
     global trap_round
     global bonus_round
     global jackpot_round
-    if stop_round:
+    used_items_this_round.clear()
+    if game_rounds.stopped:
         return
     channel = discord.utils.get(bot.get_all_channels(), name=CHANNEL_NAME)
     if channel is None:
         logger.warning("channel not found")
         return
+        
+    if random.random() < chest_chance:
+        # możliwe drzwi na skrzyni, bez correct i trap
+        possible_doors = [d for d in range(1, 6) if d != correct_door and d != trap_door]
+        if possible_doors:
+            chest_door = random.choice(possible_doors)
+            # szukamy użytkownika, który wybrał te drzwi
+            chest_winners = [user_id for user_id, choice in choices.items() if choice == chest_door]
+            if chest_winners:
+                chest_winner = random.choice(chest_winners)
 
     # --- Previous round completed ---
     if correct_door is not None:
@@ -278,7 +345,18 @@ async def round():
                             outcome += f"{user_mention} — ✅ acquired (+{points} pts, found +{doorcal} Doorcal and retrieved **{items_data[dropped_item]['name']}**)!\n"
                         else:
                             outcome += f"{user_mention} — ✅ acquired (+{points} pts and found +{doorcal} Doorcal)\n"
-                                
+                        if chest_winner:
+                            member = channel.guild.get_member(chest_winner)
+                            user_mention = member.mention if member else f"<@{chest_winner}>"
+
+                            # wiadomość z przyciskiem otwarcia skrzyni
+                            chest_msg = await channel.send(
+                                f"🎁 {user_mention}, you found a **chest**! You need a **Golden Key** to open it.",
+                                components=[
+                                Button(label="Open Chest", custom_id=f"open_chest_{chest_winner}")
+                                ]
+                            )
+
                     elif trap_round and choice == trap_door:
                         points = 1
                         cursor.execute("""
@@ -475,8 +553,77 @@ async def Pouch_view(interaction: discord.Interaction, target_user: discord.Memb
         msg += "You have no items in your pouch. Time to fill it.\n"
 
     await interaction.response.send_message(msg, ephemeral=True, delete_after=20)
-   
-# --- Komenda /top ---
+
+# global variable to track used items per round
+used_items_this_round = set()  # przechowuje user_id
+
+@bot.tree.command(name="use", description="Use an item", guild=discord.Object(id=1478885390407434455))
+@app_commands.describe(item_name="Name of the item to use")
+async def use(interaction: discord.Interaction, item_name: str):
+    if interaction.channel.name != CHANNEL_NAME:
+        await interaction.response.send_message(
+            "❌ You can only use items in the game channel.", ephemeral=True
+        )
+        return
+
+    user_id = interaction.user.id
+
+    # check if user already used an item this round
+    if user_id in used_items_this_round:
+        await interaction.response.send_message(
+            "❌ You have already used an item this round.", ephemeral=True
+        )
+        return
+
+    async with db_lock:
+        cursor.execute("SELECT items FROM pouch WHERE user_id=?", (user_id,))
+        result = cursor.fetchone()
+        user_items = json.loads(result[0]) if result and result[0] else {}
+
+        if item_name not in user_items or user_items[item_name] <= 0:
+            await interaction.response.send_message("❌ You don't have this item.", ephemeral=True)
+            return
+
+        # Shield – pasywny
+        if item_name == "shield":
+            await interaction.response.send_message(
+                "🛡 Shield is passive and will protect you automatically from trap doors.", ephemeral=True
+            )
+
+        # Golden Key – pasywny przy /use
+        elif item_name == "golden_key":
+            await interaction.response.send_message(
+                "🗝 Golden Key is used automatically when opening a golden chest with /open golden_chest.", ephemeral=True
+            )
+
+        # Normal use items
+        elif item_name in ["eavesdrop", "prophecy"]:
+            user_items[item_name] -= 1
+            if user_items[item_name] <= 0:
+                del user_items[item_name]
+
+            cursor.execute("UPDATE pouch SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
+            conn.commit()
+
+            if item_name == "eavesdrop":
+                await interaction.response.send_message(
+                    "👂 Eavesdrop used! Check if you chose the correct door soon!", ephemeral=True
+                )
+            elif item_name == "prophecy":
+                await interaction.response.send_message(
+                    "🔮 Prophecy used! 2 wrong doors will be removed at the start of the round.", ephemeral=True
+                )
+
+        else:
+            await interaction.response.send_message("❌ Unknown item.", ephemeral=True)
+            return
+
+        # mark user as having used an item this round
+        used_items_this_round.add(user_id)
+
+# ------------------------------------------------------------------------------------------------- admin commands -------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------- Komenda /top  -------------------------------------------------------------------------------------------------
 @bot.tree.command(name="top", description="Pokaż TOP 20 graczy all-time", guild=discord.Object(id=1478885390407434455))
 @has_moderator_role()
 async def top(interaction: discord.Interaction):
@@ -495,8 +642,6 @@ async def top(interaction: discord.Interaction):
         msg += f"**{i}.** {name} — {points} pkt\n"
 
     await interaction.response.send_message(msg)
-
-# ------------------------------------------------------------------------------------------------- admin commands -------------------------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------------------------------ give ------------------------------------------------------------------------------------------------------
 @bot.tree.command(name="give", description="Give currency, points or item to user", guild=discord.Object(id=1478885390407434455))
@@ -1120,6 +1265,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
