@@ -697,7 +697,7 @@ async def take(interaction: discord.Interaction, target: str, member: discord.Me
         else:
             await interaction.response.send_message("❌ Invalid target type.", ephemeral=True)
             
- @take.autocomplete("item_key")
+@take.autocomplete("item_key")
 async def item_autocomplete_take(interaction: discord.Interaction, current: str):
 
     choices = [
@@ -1112,6 +1112,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
