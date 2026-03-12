@@ -179,10 +179,10 @@ async def on_member_remove(member):
 # --- Drop chances depend of the formula---
 def drop_item(user_id, items_json):
     drop_chances = {
-        "common": 0.20,
-        "uncommon": 0.15,
-        "rare": 0.10,
-        "epic": 0.05,
+        "common": 0.15,
+        "uncommon": 0.10,
+        "rare": 0.05,
+        "epic": 0.02,
         "legendary": 0.01
     }
 
@@ -355,13 +355,20 @@ Write:
     if trap_round:
         await channel.send("""you need to sharpen your intuition""", delete_after=299)
 
-
 def shutdown_backup():
-    conn.commit()
-    upload_db()
-    logging.info("💾 Backup on bot shutdown")
+    try:
+        logging.info("⚠ Bot shutting down - starting backup")
 
-atexit.register(shutdown_backup)
+        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(FULL)")
+
+        upload_db()
+
+        conn.close()
+
+        logging.info("💾 Backup on bot shutdown completed")
+    except Exception as e:
+        logging.error(f"❌ Shutdown backup failed: {e}")
     
 @tasks.loop(time=time(hour=23, minute=59, tzinfo=ZoneInfo("Europe/Warsaw")))
 async def weekly_ranking():
@@ -1113,6 +1120,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
