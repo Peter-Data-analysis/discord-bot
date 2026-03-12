@@ -405,10 +405,6 @@ async def door(interaction: discord.Interaction, number: int):
     choices[interaction.user.id] = number
     await interaction.response.send_message("✅ your choice was saved!", ephemeral=True, delete_after=3)
     
-@bot.tree.command(
-    name="pouch_view", 
-    description="Show your points, Doorcal and inventory", 
-    guild=discord.Object(id=1478885390407434455)
 )
 @bot.tree.command(
     name="pouch_view",
@@ -1112,6 +1108,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
