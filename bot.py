@@ -172,7 +172,7 @@ async def on_message(message):
 async def on_member_remove(member):
     user_id = member.id
     async with db_lock:
-        cursor.execute("DELETE FROM punkty WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM pouch WHERE user_id = ?", (user_id,))
         conn.commit()
     logger.info(f"🗑 User points of {member.name} ({user_id}) deleted from the database")
 
@@ -198,7 +198,7 @@ def drop_item(user_id, items_json):
         chosen_item = random.choice(drop_candidates)
 
         # Pobranie aktualnych przedmiotów użytkownika
-        cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT items FROM pouch WHERE user_id = ?", (user_id,))
         result = cursor.fetchone()
         if result and result[0]:
             user_items = json.loads(result[0])
@@ -207,7 +207,7 @@ def drop_item(user_id, items_json):
 
         # add items
         user_items[chosen_item] = user_items.get(chosen_item, 0) + 1
-        cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
+        cursor.execute("UPDATE pouch SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
         conn.commit()
 
         return chosen_item
@@ -264,7 +264,7 @@ async def round():
 
                         # adding points to both columns
                         cursor.execute("""
-                            INSERT INTO punkty (user_id, week_points, alltime_points, doorcal)
+                            INSERT INTO pouch (user_id, week_points, alltime_points, doorcal)
                             VALUES (?, ?, ?, ?)
                             ON CONFLICT(user_id) DO UPDATE SET
                             week_points = week_points + ?,
@@ -282,7 +282,7 @@ async def round():
                     elif trap_round and choice == trap_door:
                         points = 1
                         cursor.execute("""
-                            INSERT INTO punkty (user_id, week_points, alltime_points)
+                            INSERT INTO pouch (user_id, week_points, alltime_points)
                             VALUES (?, ?, ?)
                             ON CONFLICT(user_id) DO UPDATE SET
                             week_points = week_points - ?,
@@ -376,7 +376,7 @@ async def weekly_ranking():
         return
     async with db_lock:
         cursor.execute(
-            "SELECT user_id, week_points FROM punkty ORDER BY week_points DESC LIMIT 10"
+            "SELECT user_id, week_points FROM pouch ORDER BY week_points DESC LIMIT 10"
         )
 
         top = cursor.fetchall()
@@ -399,7 +399,7 @@ async def weekly_ranking():
 
     await channel.send(msg)
     async with db_lock:
-        cursor.execute("UPDATE punkty SET week_points = 0")
+        cursor.execute("UPDATE pouch SET week_points = 0")
         conn.commit()
     upload_db()
     
@@ -443,7 +443,7 @@ async def Pouch_view(interaction: discord.Interaction, target_user: discord.Memb
     # Pobranie danych z bazy
     async with db_lock:
         cursor.execute(
-            "SELECT week_points, alltime_points, doorcal, items FROM punkty WHERE user_id = ?", 
+            "SELECT week_points, alltime_points, doorcal, items FROM pouch WHERE user_id = ?", 
             (user_id,)
         )
         result = cursor.fetchone()
@@ -474,7 +474,7 @@ async def Pouch_view(interaction: discord.Interaction, target_user: discord.Memb
 @has_moderator_role()
 async def top(interaction: discord.Interaction):
     async with db_lock:
-        cursor.execute("SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20")
+        cursor.execute("SELECT user_id, alltime_points FROM pouch ORDER BY alltime_points DESC LIMIT 20")
         top_all = cursor.fetchall()
 
     if not top_all:
@@ -514,7 +514,7 @@ async def give(interaction: discord.Interaction, target: str, member: discord.Me
         if target == "points":
 
             cursor.execute("""
-                INSERT INTO punkty (user_id, week_points, alltime_points)
+                INSERT INTO pouch (user_id, week_points, alltime_points)
                 VALUES (?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                 week_points = week_points + ?,
@@ -531,19 +531,19 @@ async def give(interaction: discord.Interaction, target: str, member: discord.Me
         # CURRENCY
         elif target == "currency":
 
-            cursor.execute("SELECT doorcal FROM punkty WHERE user_id=?", (user_id,))
+            cursor.execute("SELECT doorcal FROM pouch WHERE user_id=?", (user_id,))
             result = cursor.fetchone()
 
             current = result[0] if result else 0
 
             if result:
                 cursor.execute(
-                    "UPDATE punkty SET doorcal=? WHERE user_id=?",
+                    "UPDATE pouch SET doorcal=? WHERE user_id=?",
                     (current + amount, user_id)
                 )
             else:
                 cursor.execute(
-                    "INSERT INTO punkty (user_id, week_points, alltime_points, doorcal) VALUES (?,0,0,?)",
+                    "INSERT INTO pouch (user_id, week_points, alltime_points, doorcal) VALUES (?,0,0,?)",
                     (user_id, amount)
                 )
 
@@ -565,7 +565,7 @@ async def give(interaction: discord.Interaction, target: str, member: discord.Me
                 await interaction.response.send_message("❌ Item does not exist.", ephemeral=True)
                 return
 
-            cursor.execute("SELECT items FROM punkty WHERE user_id=?", (user_id,))
+            cursor.execute("SELECT items FROM pouch WHERE user_id=?", (user_id,))
             result = cursor.fetchone()
 
             user_items = json.loads(result[0]) if result and result[0] else {}
@@ -573,7 +573,7 @@ async def give(interaction: discord.Interaction, target: str, member: discord.Me
             user_items[item_key] = user_items.get(item_key, 0) + amount
 
             cursor.execute(
-                "UPDATE punkty SET items=? WHERE user_id=?",
+                "UPDATE pouch SET items=? WHERE user_id=?",
                 (json.dumps(user_items), user_id)
             )
 
@@ -613,7 +613,7 @@ async def take(interaction: discord.Interaction, target: str, member: discord.Me
         # POINTS
         if target == "points":
 
-            cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id=?", (user_id,))
+            cursor.execute("SELECT week_points, alltime_points FROM pouch WHERE user_id=?", (user_id,))
             result = cursor.fetchone()
 
             if not result:
@@ -626,7 +626,7 @@ async def take(interaction: discord.Interaction, target: str, member: discord.Me
             new_alltime = max(alltime - amount, 0)
 
             cursor.execute(
-                "UPDATE punkty SET week_points=?, alltime_points=? WHERE user_id=?",
+                "UPDATE pouch SET week_points=?, alltime_points=? WHERE user_id=?",
                 (new_week, new_alltime, user_id)
             )
 
@@ -640,7 +640,7 @@ async def take(interaction: discord.Interaction, target: str, member: discord.Me
         # CURRENCY
         elif target == "currency":
 
-            cursor.execute("SELECT doorcal FROM punkty WHERE user_id=?", (user_id,))
+            cursor.execute("SELECT doorcal FROM pouch WHERE user_id=?", (user_id,))
             result = cursor.fetchone()
 
             if not result:
@@ -651,7 +651,7 @@ async def take(interaction: discord.Interaction, target: str, member: discord.Me
             new_amount = max(current - amount, 0)
 
             cursor.execute(
-                "UPDATE punkty SET doorcal=? WHERE user_id=?",
+                "UPDATE pouch SET doorcal=? WHERE user_id=?",
                 (new_amount, user_id)
             )
 
@@ -669,7 +669,7 @@ async def take(interaction: discord.Interaction, target: str, member: discord.Me
                 await interaction.response.send_message("❌ Provide item_key.", ephemeral=True)
                 return
 
-            cursor.execute("SELECT items FROM punkty WHERE user_id=?", (user_id,))
+            cursor.execute("SELECT items FROM pouch WHERE user_id=?", (user_id,))
             result = cursor.fetchone()
 
             items = json.loads(result[0]) if result and result[0] else {}
@@ -684,7 +684,7 @@ async def take(interaction: discord.Interaction, target: str, member: discord.Me
                 del items[item_key]
 
             cursor.execute(
-                "UPDATE punkty SET items=? WHERE user_id=?",
+                "UPDATE pouch SET items=? WHERE user_id=?",
                 (json.dumps(items), user_id)
             )
 
@@ -714,7 +714,7 @@ async def item_autocomplete_take(interaction: discord.Interaction, current: str)
 @has_moderator_role()
 async def remove_record(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
-        cursor.execute("DELETE FROM punkty WHERE user_id = ?", (member.id,))
+        cursor.execute("DELETE FROM pouch WHERE user_id = ?", (member.id,))
         conn.commit()
     await interaction.response.send_message(f"🗑 {member.mention}'s data has been removed from the database.", ephemeral=True)
 
@@ -723,7 +723,7 @@ async def remove_record(interaction: discord.Interaction, member: discord.Member
 @has_moderator_role()
 async def points_reset(interaction: discord.Interaction):
     async with db_lock:
-        cursor.execute("UPDATE punkty SET week_points = 0")
+        cursor.execute("UPDATE pouch SET week_points = 0")
         conn.commit()
     await interaction.response.send_message("♻️ Weekly points from all users have been reset")
 
@@ -829,7 +829,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
         return
 
     async with db_lock:
-        cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
+        cursor.execute("SELECT items, doorcal FROM pouch WHERE user_id=?", (user_id,))
         result = cursor.fetchone()
 
     items = json.loads(result[0]) if result and result[0] else {}
@@ -858,7 +858,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
         else:
             take(items, have, have_amount)
         cursor.execute(
-            "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+            "UPDATE pouch SET items=?, doorcal=? WHERE user_id=?",
             (json.dumps(items), doorcal, user_id)
         )
         conn.commit()
@@ -888,7 +888,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
                 )
                 async with db_lock:
 
-                    cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
+                    cursor.execute("SELECT items, doorcal FROM pouch WHERE user_id=?", (user_id,))
                     result = cursor.fetchone()
 
                     items_o = json.loads(result[0]) if result and result[0] else {}
@@ -900,7 +900,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
                         items_o[have] = items_o.get(have, 0) + have_amount
 
                     cursor.execute(
-                        "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                        "UPDATE pouch SET items=?, doorcal=? WHERE user_id=?",
                         (json.dumps(items_o), doorcal_o, user_id)
                     )
 
@@ -922,7 +922,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
             async with db_lock:
 
                 # accepter data
-                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (interaction_btn.user.id,))
+                cursor.execute("SELECT items, doorcal FROM pouch WHERE user_id=?", (interaction_btn.user.id,))
                 result_a = cursor.fetchone()
 
                 items_a = json.loads(result_a[0]) if result_a and result_a[0] else {}
@@ -942,7 +942,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
                         return
 
                 # offerer data
-                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
+                cursor.execute("SELECT items, doorcal FROM pouch WHERE user_id=?", (user_id,))
                 result_o = cursor.fetchone()
 
                 items_o = json.loads(result_o[0]) if result_o and result_o[0] else {}
@@ -974,12 +974,12 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
 
                 # save to database
                 cursor.execute(
-                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    "UPDATE pouch SET items=?, doorcal=? WHERE user_id=?",
                     (json.dumps(items_o), doorcal_o, user_id)
                 )
 
                 cursor.execute(
-                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    "UPDATE pouch SET items=?, doorcal=? WHERE user_id=?",
                     (json.dumps(items_a), doorcal_a, interaction_btn.user.id)
                 )
 
@@ -1021,7 +1021,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
             await interaction_btn.response.send_message("Trade cancelled.", ephemeral=True)
             async with db_lock:
 
-                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
+                cursor.execute("SELECT items, doorcal FROM pouch WHERE user_id=?", (user_id,))
                 result = cursor.fetchone()
 
                 items_o = json.loads(result[0]) if result and result[0] else {}
@@ -1033,7 +1033,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
                     items_o[have] = items_o.get(have, 0) + have_amount
 
                 cursor.execute(
-                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    "UPDATE pouch SET items=?, doorcal=? WHERE user_id=?",
                     (json.dumps(items_o), doorcal_o, user_id)
                 )
 
@@ -1113,6 +1113,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
