@@ -15,24 +15,24 @@ from datetime import datetime, timezone, time
 from zoneinfo import ZoneInfo
 from discord import app_commands
 
-# --- Konfiguracja ---
+# --- Configuration ---
 TOKEN = os.environ["DISCORD_TOKEN"]
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 
 CHANNEL_NAME = "❰❰🚪❱❱luckydoors"
-CHANNEL_NAMEX = "❰❰🚪❱❱czat-gry"
-HANDEL_CHANNEL = "❰❰💼❱❱handel"
+CHANNEL_NAMEX = "❰❰🚪❱❱game_chat"
+TRADE_CHANNEL = "❰❰💼❱❱trade"
 db_lock = asyncio.Lock()
 
-# --- Logowanie ---
+# --- Login ---
 keep_alive()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-stop_runda = False
+stop_round = False
 items_data = {}
-oferty = {}
+listings = {}
 
-# --- Funkcja backupu bazy na GitHub ---
+# --- Database backup function on Github ---
 def download_db():
     url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
     try:
@@ -41,18 +41,13 @@ def download_db():
             content = base64.b64decode(r.json()["content"])
             with open("luckydoors.db", "wb") as f:
                 f.write(content)
-            logging.info("✅ Pobrano backup bazy z GitHub")
+            logging.info("✅ Download database backup from Github")
         else:
-            logging.warning("⚠ Nie znaleziono backupu bazy, zostanie utworzona nowa")
+            logging.warning("⚠ Database backup not found, new one will be created" "Nie znaleziono backupu bazy, zostanie utworzona nowa")
     except Exception as e:
-        logging.error(f"❌ Błąd przy pobieraniu backupu: {e}")
+        logging.error(f"❌ Error occurred while downloading backup: {e}")
 
 def upload_db(max_retries: int = 3, delay: float = 2.0):
-    """
-    Uploaduje lokalną bazę SQLite na GitHub.
-    max_retries – ile razy próbować w razie błędu
-    delay – czas w sekundach między próbami
-    """
     with open("luckydoors.db", "rb") as f:
         content = base64.b64encode(f.read()).decode()
 
@@ -60,30 +55,34 @@ def upload_db(max_retries: int = 3, delay: float = 2.0):
 
     for attempt in range(1, max_retries + 1):
         try:
-            # pobranie sha jeśli plik już istnieje
             r_get = requests.get(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-            sha = r_get.json()["sha"] if r_get.status_code == 200 else None
+            sha = None
+            if r_get.status_code == 200:
+                try:
+                    sha = r_get.json().get("sha")
+                except Exception:
+                    sha = None
 
-            data = {"message": "backup database", "content": content}
+            data = {"message": f"backup database {datetime.now().isoformat()}", "content": content}
             if sha:
                 data["sha"] = sha
 
             r_put = requests.put(url, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
             if r_put.status_code in [200, 201]:
-                logging.info("✅ Baza wysłana na GitHub")
+                logging.info("✅ the database has been sent to github")
                 return True
             else:
                 try:
                     err = r_put.json()
                 except:
                     err = r_put.text
-                logging.warning(f"⚠ Próba {attempt}: Błąd przy wysyłaniu bazy: {r_put.status_code} {err}")
+                logging.warning(f"⚠ Attempt {attempt}: PUT failed: {r_put.status_code} {err}")
         except Exception as e:
-            logging.warning(f"⚠ Próba {attempt}: wyjątek przy upload: {e}")
+            logging.warning(f"⚠ Attempt {attempt}: exception during upload: {e}")
 
         time.sleep(delay)
 
-    logging.error("❌ Nie udało się wysłać bazy po kilku próbach")
+    logging.error("❌ Failed to upload database after several attempts")
     return False
 
 def download_items():
@@ -94,9 +93,9 @@ def download_items():
             content = base64.b64decode(r.json()["content"])
             with open("items.json", "wb") as f:
                 f.write(content)
-            logging.info("✅ Pobrano items.json")
+            logging.info("✅ items.json downloaded")
         except Exception as e:
-            logging.error(f"❌ Błąd przy zapisie items.json: {e}")
+            logging.error(f"❌ Error while saving items.json: {e}")
     else:
         logging.warning(f"⚠ Nie udało się pobrać items.json, status: {r.status_code}")
 
@@ -105,26 +104,26 @@ def load_items():
     try:
         with open("items.json", "r", encoding="utf-8") as f:
             items_data = json.load(f)
-        logging.info("✅ Items załadowane")
+        logging.info("✅ Items fetched from database")
     except Exception as e:
-        logging.error(f"❌ Błąd ładowania items: {e}")
+        logging.error(f"❌ Failed to fetched items from database: {e}")
 
 # --- Połączenie z SQLite ---
 download_db()
-download_items()
-load_items()
 conn = sqlite3.connect("luckydoors.db", check_same_thread=False)
 conn.execute("PRAGMA journal_mode=WAL;")
 cursor = conn.cursor()
+download_items()
+load_items()
 
-poprawne_drzwi = None
-pulapka_drzwi = None
-wybory = {}
-bonusowa_runda = False
-pulapka_runda= False
-jackpot_runda = False
 
-# --- Event: bot ready ---
+correct_door = None
+trap_door = None
+choices = {}
+bonus_round = False
+trap_door= False
+jackpot_round = False
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -132,33 +131,26 @@ intents.members = True
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
-        # synchronizacja komend
-        try:
-            synced = await self.tree.sync()
-            logging.info(f"✅ Zsynchronizowano {len(synced)} komend slash")
-        except Exception as e:
-            logging.error(f"❌ Błąd przy sync komend: {e}")
-
-        # uruchomienie pętli/loopów
         if not auto_backup.is_running():
             auto_backup.start()
-        if not runda.is_running():
-            runda.start()
-        if not tygodniowy_ranking.is_running():
-            tygodniowy_ranking.start()
+        if not round.is_running():
+            round.start()
+        if not weekly_ranking.is_running():
+            weekly_ranking.start()
             
 bot = MyBot(command_prefix=None, intents=intents)
 
+# --- Event: bot ready ---
 @bot.event
 async def on_ready():
-    logging.info(f"Zalogowano jako {bot.user}")
+    logging.info(f"logged in as {bot.user}")
     guild_id = 1478885390407434455
     guild = discord.Object(id=guild_id)
     try:
         synced = await bot.tree.sync(guild=guild)
-        logging.info(f"✅ Zsynchronizowano {len(synced)} komend w guild {guild_id}")
+        logging.info(f"✅ {len(synced)} command on guild: {guild_id} synchronized")
     except Exception as e:
-        logging.error(f"❌ Błąd sync: {e}")
+        logging.error(f"❌ sync error: {e}")
 
 # --- Event: filtrowanie wiadomości ---
 @bot.event
@@ -166,12 +158,7 @@ async def on_message(message):
     # ignorujemy wiadomości od botów
     if message.author.bot:
         return
-
-    # kanał gry — usuwamy wszystko, co nie jest slash command
     if message.channel.name == CHANNEL_NAME:
-        # slash commands nie zaczynają się od "/" w treści wiadomości,
-        # więc nie wantmy niczego usuwać jeśli to komenda slash
-        # (Discord API same obsługuje slashy)
         if message.content and not message.content.startswith("/drzwi"):
             await message.delete()
 # --- Event: usuwanie użytkownika z bazy danych po wyjściu z serwera ---
@@ -181,9 +168,9 @@ async def on_member_remove(member):
     async with db_lock:
         cursor.execute("DELETE FROM punkty WHERE user_id = ?", (user_id,))
         conn.commit()
-    logger.info(f"🗑 Usunięto punkty użytkownika {member.name} ({user_id}) z bazy")
+    logger.info(f"🗑 User points of {member.name} ({user_id}) deleted from the database")
 
-# --- Szanse dropu w zależności od rarity---
+# --- Drop chances depend of the formula---
 def drop_item(user_id, items_json):
     drop_chances = {
         "common": 0.20,
@@ -212,7 +199,7 @@ def drop_item(user_id, items_json):
         else:
             user_items = {}
 
-        # Dodanie przedmiotu
+        # add items
         user_items[chosen_item] = user_items.get(chosen_item, 0) + 1
         cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
         conn.commit()
@@ -225,31 +212,31 @@ async def auto_backup():
     async with db_lock:
         conn.commit()
         upload_db()
-        logging.info("💾 Automatyczny backup wykonany")
+        logging.info("💾 Automatic backup executed")
 
-# --- Pętla rundy ---
+# --- rounds loop ---
 @tasks.loop(minutes=5)
-async def runda():
-    global poprawne_drzwi, wybory, pulapka_drzwi
-    global pulapka_runda
-    global bonusowa_runda
-    global jackpot_runda
-    if stop_runda:
-        return  # nic nie robimy, runda nie startuje
+async def round():
+    global correct_door, choices, trap_door
+    global trap_round
+    global bonus_round
+    global jackpot_round
+    if stop_round:
+        return
     channel = discord.utils.get(bot.get_all_channels(), name=CHANNEL_NAME)
     if channel is None:
-        logger.warning("Nie znaleziono kanału")
+        logger.warning("channel not found")
         return
 
-    # --- Zakończenie poprzedniej rundy ---
-    if poprawne_drzwi is not None:
-        wynik = f"🎮 **KONIEC RUNDY**\n\nPoprawne drzwi: **{poprawne_drzwi}**\n\n"
+    # --- Previous round completed ---
+    if correct_door is not None:
+        outcome = f"🎮 **Round finished**\n\nCorrect door: **{correct_door}**\n\n"
 
-        if not wybory:
-            wynik += "Nikt nie wybrał drzwi."
+        if not choices:
+            outcome += "No one participated in this round."
         else:
             async with db_lock: 
-                for user_id, wybor in wybory.items():
+                for user_id, choice in choices.items():
                     member = channel.guild.get_member(user_id)
 
                     if member:
@@ -257,19 +244,19 @@ async def runda():
                     else:
                         user_mention = f"<@{user_id}>"
 
-                    if wybor == poprawne_drzwi:
+                    if choice == correct_door:
 
-                        if jackpot_runda:
+                        if jackpot_round:
                             doorcal = random.randint(15, 40)
-                            punkty = 15
-                        elif bonusowa_runda:
+                            points = 15
+                        elif bonus_round:
                             doorcal = random.randint(5, 20)
-                            punkty = 5
+                            points = 5
                         else:
                             doorcal = random.randint(1, 4)
-                            punkty = 1
+                            points = 1
 
-                        # Dodanie punktów do obu kolumn
+                        # adding points to both columns
                         cursor.execute("""
                             INSERT INTO punkty (user_id, week_points, alltime_points, doorcal)
                             VALUES (?, ?, ?, ?)
@@ -277,107 +264,109 @@ async def runda():
                             week_points = week_points + ?,
                             alltime_points = alltime_points + ?,
                             doorcal = doorcal + ?
-                            """, (user_id, punkty, punkty, doorcal, punkty, punkty, doorcal))
+                            """, (user_id, points, points, doorcal, points, points, doorcal))
                     
-                            # --- Drop przedmiotu ---
+                            # --- Drop item ---
                         dropped_item = drop_item(user_id, items_data)
                         if dropped_item:
-                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt, +{doorcal} Doorcal i zdobył **{items_data[dropped_item]['name']}**)!\n"
+                            outcome += f"{user_mention} — ✅ acquired (+{points} pts, found +{doorcal} Doorcal and retrieved **{items_data[dropped_item]['name']}**)!\n"
                         else:
-                            wynik += f"{user_mention} — ✅ trafił (+{punkty} pkt, +{doorcal} Doorcal)\n"
+                            outcome += f"{user_mention} — ✅ acquired (+{points} pts and found +{doorcal} Doorcal)\n"
                                 
-                    elif pulapka_runda and wybor == pulapka_drzwi:
-                        punkty = 1
+                    elif trap_round and choice == trap_door:
+                        points = 1
                         cursor.execute("""
                             INSERT INTO punkty (user_id, week_points, alltime_points)
                             VALUES (?, ?, ?)
                             ON CONFLICT(user_id) DO UPDATE SET
                             week_points = week_points - ?,
                             alltime_points = alltime_points - ?
-                            """, (user_id, punkty, punkty, punkty, punkty))
-                        wynik += f"{user_mention} — ☠️ PUŁAPKA. (-1 pkt)\n"
+                            """, (user_id, points, points, points, points))
+                        outcome += f"{user_mention} — ☠️ TRAP. (-1 pts)\n"
                     else:
-                        wynik += f"{user_mention} — ❌ pudło\n"
+                        outcome += f"{user_mention} — ❌ only silence...\n"
             conn.commit()
-        await channel.send(wynik, delete_after=60)
+        await channel.send(outcome, delete_after=60)
 
-    # --- Losowanie rundy ---
-    jackpot_runda = random.random() < 0.005
-    bonusowa_runda = False
-    if not jackpot_runda:
-        bonusowa_runda = random.random() < 0.05
-    pulapka_runda = random.random() < 0.2
+    # --- round draw ---
+    jackpot_round = random.random() < 0.01
+    bonus_round = False
+    if not jackpot_round:
+        bonus_round = random.random() < 0.05
+    trap_round = random.random() < 0.2
     
 
-    # --- Nowa runda ---
-    poprawne_drzwi = random.randint(1, 5)
-    if pulapka_runda:
-        pulapka_drzwi = random.randint(1, 5)
-        while pulapka_drzwi == poprawne_drzwi:
-            pulapka_drzwi = random.randint(1, 5)
-    elif not pulapka_runda:
-        pulapka_drzwi = None
+    # --- New round ---
+    correct_door = random.randint(1, 5)
+    if trap_round:
+        trap_door = random.randint(1, 5)
+        while trap_door == correct_door:
+            trap_door = random.randint(1, 5)
+    elif not trap_round:
+        trap_door = None
     
-    wybory = {}
+    choices = {}
 
-    if bonusowa_runda:
-        logging.info("✅ Wystąpiła bonusowa runda!")
-        tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
+    if bonus_round:
+        logging.info("✅ Bonus round occurred!")
+        text = """**New round LUCKY DOORS**
 
-Wyczuwam jakieś bonusy 💰...
+Seems like luck is on your side 💰
 
-🚪 Wybierz drzwi **1-5**
+🚪 Choose your path **1-5**
 
-Wpisz:
-`/drzwi numer`
+Write:
+`/door number`
 
-⏳ Czas: 5 minut"""
+⏳ Time: 5 minutes"""
 
-    elif jackpot_runda:
-        logging.info("✅ Wystąpiła runda Jackpot!")
-        tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
+    elif jackpot_round:
+        logging.info("✅ Jackpot round occurred!")
+        text = """🎮 **New round LUCKY DOORS**
 
-Szykuje się ostre zarabianie 💰💰💰...
+This time the fates bleed gold! 💰💰💰...
 
-🚪 Wybierz drzwi **1-5**
+🚪 Choose your path **1-5**
 
-Wpisz:
-`/drzwi numer`
+Write:
+`/door number`
 
-⏳ Czas: 5 minut"""
+⏳ Time: 5 minutes"""
 
     else:
-        tekst = """🎮 **NOWA RUNDA LUCKY DOORS**
+        text = """ **New round LUCKY DOORS**
 
-Nic ciekawego...
+empty path... empty pouch...
 
-🚪 Wybierz drzwi **1-5**
+🚪 Choose your path **1-5**
 
-Wpisz:
-`/drzwi numer`
+Write:
+`/door number`
 
-⏳ Czas: 5 minut"""
+⏳ Time: 5 minutes"""
 
-    await channel.send(tekst, delete_after=299)
-    if pulapka_runda:
-        await channel.send("""🪤 Czuję również jakieś niebezpieczeństwo... Bądź ostrożny!""", delete_after=299)
+    await channel.send(text, delete_after=299)
+    if trap_round:
+        await channel.send("""you need to sharpen your intuition""", delete_after=299)
+
+
 def shutdown_backup():
     conn.commit()
     upload_db()
-    print("💾 Backup przy zamykaniu bota")
+    logging.info("💾 Backup on bot shutdown")
 
 atexit.register(shutdown_backup)
     
 @tasks.loop(time=time(hour=23, minute=59, tzinfo=ZoneInfo("Europe/Warsaw")))
-async def tygodniowy_ranking():
+async def weekly_ranking():
 
     if datetime.now(ZoneInfo("Europe/Warsaw")).weekday() != 6:
         return
         
-    channel = discord.utils.get(bot.get_all_channels(), name="❰❰📣❱❱-ogłoszenia")
+    channel = discord.utils.get(bot.get_all_channels(), name="❰❰📣❱❱annoucements")
 
     if channel is None:
-        logger.warning("Nie znaleziono kanału ogłoszeń")
+        logger.warning("annoucements channel not found")
         return
     async with db_lock:
         cursor.execute(
@@ -390,7 +379,7 @@ async def tygodniowy_ranking():
         await channel.send("📊 Brak danych do rankingu.")
         return
 
-    msg = "🏆 **TOP 10 GRACZY TYGODNIA - LUCKY DOORS**\n\n"
+    msg = "🏆 **TOP 10 dwellers - LUCKY DOORS**\n\n"
 
     for i, (user_id, points) in enumerate(top, start=1):
         member = channel.guild.get_member(user_id)
@@ -408,30 +397,77 @@ async def tygodniowy_ranking():
         conn.commit()
     upload_db()
     
-# --- Komenda /drzwi ---
-@bot.tree.command(name="drzwi", description="Wybierz drzwi w aktualnej rundzie gry", guild=discord.Object(id=1478885390407434455))
-async def drzwi(interaction: discord.Interaction, numer: int):
+# --- command /door ---
+@bot.tree.command(name="door", description="Select a door", guild=discord.Object(id=1478885390407434455))
+async def door(interaction: discord.Interaction, number: int):
     if interaction.channel.name != CHANNEL_NAME:
         return
-    wybory[interaction.user.id] = numer
-    # odpowiedź „ephemeral” czyli tylko dla użytkownika, niewidoczna publicznie
-    await interaction.response.send_message("✅ Twój wybór został zapisany!", ephemeral=True, delete_after=3)
+    choices[interaction.user.id] = number
+    await interaction.response.send_message("✅ your choice was saved!", ephemeral=True, delete_after=3)
     
-# --- Komenda /punkty ---
-@bot.tree.command(name="punkty", description="Sprawdź swoje punkty tygodniowe i all-time", guild=discord.Object(id=1478885390407434455))
-async def punkty(interaction: discord.Interaction):
+@bot.tree.command(
+    name="pouch_view", 
+    description="Show your points, Doorcal and inventory", 
+    guild=discord.Object(id=1478885390407434455)
+)
+@bot.tree.command(
+    name="pouch_view",
+    description="Show your points, Doorcal and inventory",
+    guild=discord.Object(id=1478885390407434455)
+)
+@app_commands.describe(target_user="View stats for another user (Admins/Mods)")
+async def Pouch_view(interaction: discord.Interaction, target_user: discord.Member = None):
+    # Sprawdzenie kanału
     if interaction.channel.name != CHANNEL_NAMEX:
+        await interaction.response.send_message(
+            "❌ This command works only in the game channel.", ephemeral=True, delete_after=5
+        )
         return
-    user_id = interaction.user.id
-    async with db_lock:
-        cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-    if result:
-        week, alltime = result
-        await interaction.response.send_message(f"{interaction.user.mention}, masz **{week} punktów tygodniowych** i **{alltime} punktów all-time** 🎉", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"{interaction.user.mention}, jeszcze nie masz punktów. Zacznij grać!", ephemeral=True)
 
+    # Sprawdzenie, czy użytkownik podał target_user
+    if target_user:
+        # Sprawdzenie ról użytkownika
+        allowed = any(role.name in MODERATOR_ROLES for role in interaction.user.roles)
+        if not allowed:
+            await interaction.response.send_message(
+                "❌ You can't view other users' stats.", ephemeral=True, delete_after=5
+            )
+            return
+        user_id = target_user.id
+        display_user = target_user
+    else:
+        user_id = interaction.user.id
+        display_user = interaction.user
+
+    # Pobranie danych z bazy
+    async with db_lock:
+        cursor.execute(
+            "SELECT week_points, alltime_points, doorcal, items FROM punkty WHERE user_id = ?", 
+            (user_id,)
+        )
+        result = cursor.fetchone()
+
+    if result:
+        week_points, alltime_points, doorcal, items_json = result
+        items = json.loads(items_json) if items_json else {}
+    else:
+        week_points = alltime_points = doorcal = 0
+        items = {}
+
+    # Tworzymy wiadomość
+    msg = f"📊 **Stats for {display_user.mention}**\n\n"
+    msg += f"**Points:** {week_points} this week | {alltime_points} all-time\n"
+    msg += f"**Doorcal:** {doorcal}\n"
+
+    if items:
+        msg += "**Inventory:**\n"
+        for item_name, amount in items.items():
+            msg += f"- {item_name}: {amount}\n"
+    else:
+        msg += "You have no items in your pouch. Time to fill it.\n"
+
+    await interaction.response.send_message(msg, ephemeral=True, delete_after=20)
+   
 # --- Komenda /top ---
 @bot.tree.command(name="top", description="Pokaż TOP 20 graczy all-time", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
@@ -452,270 +488,343 @@ async def top(interaction: discord.Interaction):
 
     await interaction.response.send_message(msg)
 
-# --- Komenda /czas_ranking ---
-@bot.tree.command(name="czas_ranking", description="Sprawdź, za ile czasu rozpocznie się kolejny ranking tygodniowy", guild=discord.Object(id=1478885390407434455))
-async def czas_ranking(interaction: discord.Interaction):
-    if not tygodniowy_ranking.is_running():
-        await interaction.response.send_message("⏳ Ranking tygodniowy nie jest uruchomiony.")
-        return
+# ------------------------------------------------------------------------------------------------- admin commands -------------------------------------------------------------------------------------------------
 
-    next_time = tygodniowy_ranking.next_iteration
-    now = datetime.now(timezone.utc)
-    delta = next_time - now
-    hours, remainder = divmod(int(delta.total_seconds()), 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    await interaction.response.send_message(f"⏰ Kolejny ranking tygodniowy rozpocznie się za {hours}h {minutes}m {seconds}s.")
-
-# --- Komendy administracyjne /punkty_dodaj i /punkty_usun ---
-@bot.tree.command(name="punkty_dodaj", description="Dodaj punkty wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
+# ------------------------------------------------------------------------------------------------------ give ------------------------------------------------------------------------------------------------------
+@bot.tree.command(name="give", description="Give currency, points or item to user", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
-async def punkty_dodaj(interaction: discord.Interaction, member: discord.Member, amount: int):
+@app_commands.describe(
+    target="points / currency / item",
+    member="Target user",
+    amount="Amount",
+    item_key="Item key (only for items)"
+)
+async def give(interaction: discord.Interaction, target: str, member: discord.Member, amount: int, item_key: str = None):
+
     if amount <= 0:
-        await interaction.response.send_message("❌ Podaj dodatnią liczbę punktów!", ephemeral=True)
-        return
-
-    async with db_lock:
-        cursor.execute("""
-            INSERT INTO punkty (user_id, week_points, alltime_points)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-            week_points = week_points + ?,
-            alltime_points = alltime_points + ?
-        """, (member.id, amount, amount, amount, amount))
-        conn.commit()
-    await interaction.response.send_message(f"✅ Dodano {amount} punktów użytkownikowi {member.mention}.")
-
-@bot.tree.command(name="punkty_usun", description="Usuń punkty wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def punkty_usun(interaction: discord.Interaction, member: discord.Member, amount: int):
-    if amount <= 0:
-        await interaction.response.send_message("❌ Podaj dodatnią liczbę punktów!", ephemeral=True)
-        return
-
-    async with db_lock:
-        cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (member.id,))
-        result = cursor.fetchone()
-        if result:
-            week, alltime = result
-            new_week = max(week - amount, 0)
-            new_alltime = max(alltime - amount, 0)
-            cursor.execute("UPDATE punkty SET week_points = ?, alltime_points = ? WHERE user_id = ?",
-                           (new_week, new_alltime, member.id))
-            conn.commit()
-            await interaction.response.send_message(f"✅ Usunięto {amount} punktów użytkownikowi {member.mention}.")
-        else:
-            await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma punktów w bazie.")
-
-# --- Komenda /usun_dane ---
-@bot.tree.command(name="usun_dane", description="Usuń wszystkie dane użytkownika z bazy", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def usun_dane(interaction: discord.Interaction, member: discord.Member):
-    async with db_lock:
-        cursor.execute("DELETE FROM punkty WHERE user_id = ?", (member.id,))
-        conn.commit()
-    await interaction.response.send_message(f"🗑 Dane użytkownika {member.mention} zostały usunięte z bazy.")
-
-# --- Komenda /punkty_reset ---
-@bot.tree.command(name="punkty_reset", description="Zresetuj punkty tygodniowe wszystkich użytkowników", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def punkty_reset(interaction: discord.Interaction):
-    async with db_lock:
-        cursor.execute("UPDATE punkty SET week_points = 0")
-        conn.commit()
-    await interaction.response.send_message("♻️ Punkty tygodniowe wszystkich użytkowników zostały zresetowane.")
-
-# --- Komenda /punkty_pokaz ---
-@bot.tree.command(name="punkty_pokaz", description="Pokaż punkty wybranego użytkownika", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def punkty_pokaz(interaction: discord.Interaction, member: discord.Member):
-    async with db_lock:
-        cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id = ?", (member.id,))
-        result = cursor.fetchone()
-    if result:
-        week, alltime = result
-        await interaction.response.send_message(f"{member.mention} ma **{week} punktów tygodniowych** i **{alltime} punktów all-time**.")
-    else:
-        await interaction.response.send_message(f"{member.mention} nie ma punktów w bazie.")
-
-# --- Komendy administracyjne: runda_stop / runda_start ---
-@bot.tree.command(name="runda_stop", description="Zatrzymaj aktualną rundę gry", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def runda_stop(interaction: discord.Interaction):
-    global stop_runda, stop_msg
-    stop_runda = True
-    channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
-    if channel:
-        stop_msg = await channel.send("⏹ Aktualna runda została zatrzymana. Kolejne rundy nie będą się rozpoczynać")
-
-@bot.tree.command(name="runda_start", description="Wznów grę po zatrzymaniu rundy", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def runda_start(interaction: discord.Interaction):
-    global stop_runda, stop_msg
-    if stop_runda:
-        stop_runda = False
-        if stop_msg:
-            try:
-                await stop_msg.delete()
-            except discord.NotFound:
-                pass
-            stop_msg = None
-        channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
-        if channel:
-            await channel.send("▶️ Runda została wznowiona. Poczekaj na wiadomość o nowej rundzie", delete_after=299)
-    else:
-        await interaction.response.send_message("❌ Gra już działa.", ephemeral=True)
-
-# --- Komenda /sklep ---
-@bot.tree.command(name="sklep", description="Pokaż dostępne przedmioty w sklepie", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def sklep(interaction: discord.Interaction):
-    
-    msg = "🛒 **SKLEP LUCKY DOORS**\n\n"
-    for key, item in items_data.items():
-        msg += f"**{item['name']}** — {item['cena']} pkt\n{item['opis']}\n\n"
-    await interaction.response.send_message(msg)
-
-# --- Komenda /inventory ---
-@bot.tree.command(name="itemy", description="Pokaż swoje przedmioty", guild=discord.Object(id=1478885390407434455))
-async def itemy(interaction: discord.Interaction):
-    user_id = interaction.user.id
-    async with db_lock:
-        cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-
-    if result:
-        items = json.loads(result[0]) if result[0] else {}
-    else:
-        items = {}
-
-    if not items:
-        await interaction.response.send_message(f"{interaction.user.mention}, nie masz jeszcze żadnych przedmiotów.", ephemeral=True)
-    else:
-        tekst = f"{interaction.user.mention}, oto Twoje przedmioty:\n"
-        for item, amount in items.items():
-            tekst += f"- {item}: {amount}\n"
-        await interaction.response.send_message(tekst, ephemeral=True)
-
-# --- Komenda administracyjna /przedmiot_dodaj ---
-@bot.tree.command(name="przedmiot_dodaj", description="Dodaj określony przedmiot użytkownikowi", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def przedmiot_dodaj(interaction: discord.Interaction, member: discord.Member, item_key: str, amount: int):
-    if amount <= 0:
-        await interaction.response.send_message("❌ Podaj dodatnią liczbę przedmiotów!", ephemeral=True)
-        return
-
-    if item_key not in items_data:
-        await interaction.response.send_message(f"❌ Nie znaleziono przedmiotu o kluczu `{item_key}`!", ephemeral=True)
+        await interaction.response.send_message("❌ Amount must be positive.", ephemeral=True)
         return
 
     user_id = member.id
-    async with db_lock:
-        cursor.execute("SELECT items FROM punkty WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-        user_items = json.loads(result[0]) if result and result[0] else {}
-        user_items[item_key] = user_items.get(item_key, 0) + amount
-        cursor.execute("UPDATE punkty SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
-        conn.commit()
-
-    await interaction.response.send_message(f"✅ Dodano **{amount} x {items_data[item_key]['name']}** użytkownikowi {member.mention}.", ephemeral=True)
-
-@bot.tree.command(name="dodaj_walute", description="Dodaj Doorcal wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
-async def dodaj_walute(interaction: discord.Interaction, member: discord.Member, amount: int):
-    if amount <= 0:
-        await interaction.response.send_message("❌ Podaj dodatnią ilość Doorcal!", ephemeral=True)
-        return
 
     async with db_lock:
-        # Pobieramy aktualną ilość doorcal
-        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (member.id,))
-        result = cursor.fetchone()
-        current = result[0] if result else 0
 
-        # Aktualizujemy bazę
-        if result:
-            cursor.execute("UPDATE punkty SET doorcal = ? WHERE user_id = ?", (current + amount, member.id))
+        # POINTS
+        if target == "points":
+
+            cursor.execute("""
+                INSERT INTO punkty (user_id, week_points, alltime_points)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                week_points = week_points + ?,
+                alltime_points = alltime_points + ?
+            """, (user_id, amount, amount, amount, amount))
+
+            conn.commit()
+
+            await interaction.response.send_message(
+                f"✅ Gave **{amount} points** to {member.mention}.",
+                ephemeral=True
+            )
+
+        # CURRENCY
+        elif target == "currency":
+
+            cursor.execute("SELECT doorcal FROM punkty WHERE user_id=?", (user_id,))
+            result = cursor.fetchone()
+
+            current = result[0] if result else 0
+
+            if result:
+                cursor.execute(
+                    "UPDATE punkty SET doorcal=? WHERE user_id=?",
+                    (current + amount, user_id)
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO punkty (user_id, week_points, alltime_points, doorcal) VALUES (?,0,0,?)",
+                    (user_id, amount)
+                )
+
+            conn.commit()
+
+            await interaction.response.send_message(
+                f"✅ Gave **{amount} Doorcal** to {member.mention}.",
+                ephemeral=True
+            )
+
+        # ITEM
+        elif target == "item":
+
+            if not item_key:
+                await interaction.response.send_message("❌ Provide item_key.", ephemeral=True)
+                return
+
+            if item_key not in items_data:
+                await interaction.response.send_message("❌ Item does not exist.", ephemeral=True)
+                return
+
+            cursor.execute("SELECT items FROM punkty WHERE user_id=?", (user_id,))
+            result = cursor.fetchone()
+
+            user_items = json.loads(result[0]) if result and result[0] else {}
+
+            user_items[item_key] = user_items.get(item_key, 0) + amount
+
+            cursor.execute(
+                "UPDATE punkty SET items=? WHERE user_id=?",
+                (json.dumps(user_items), user_id)
+            )
+
+            conn.commit()
+
+            await interaction.response.send_message(
+                f"✅ Gave **{amount} x {items_data[item_key]['name']}** to {member.mention}.",
+                ephemeral=True
+            )
+
         else:
-            cursor.execute("INSERT INTO punkty (user_id, week_points, alltime_points, doorcal) VALUES (?, 0, 0, ?)", (member.id, amount))
-        conn.commit()
+            await interaction.response.send_message("❌ Invalid target type.", ephemeral=True)
+            
+@give.autocomplete("item_key")
+async def item_autocomplete(interaction: discord.Interaction, current: str):
 
-    await interaction.response.send_message(f"✅ Dodano {amount} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
+    choices = [
+        app_commands.Choice(name=item['name'], value=key)
+        for key, item in items_data.items()
+        if current.lower() in key.lower()
+    ]
 
-# --- Komenda administracyjna /usun_walute ---
-@bot.tree.command(name="usun_walute", description="Usuń Doorcal wybranemu użytkownikowi", guild=discord.Object(id=1478885390407434455))
+    return choices[:25]
+# ------------------------------------------------------------------------------------------------------ take ------------------------------------------------------------------------------------------------------
+@bot.tree.command(name="take", description="Remove currency, points or item from user", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
-async def usun_walute(interaction: discord.Interaction, member: discord.Member, amount: int):
+async def take(interaction: discord.Interaction, target: str, member: discord.Member, amount: int, item_key: str = None):
+
     if amount <= 0:
-        await interaction.response.send_message("❌ Podaj dodatnią ilość Doorcal!", ephemeral=True)
+        await interaction.response.send_message("❌ Amount must be positive.", ephemeral=True)
         return
 
+    user_id = member.id
+
     async with db_lock:
-        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (member.id,))
-        result = cursor.fetchone()
-        if result:
+
+        # POINTS
+        if target == "points":
+
+            cursor.execute("SELECT week_points, alltime_points FROM punkty WHERE user_id=?", (user_id,))
+            result = cursor.fetchone()
+
+            if not result:
+                await interaction.response.send_message("❌ User has no points.", ephemeral=True)
+                return
+
+            week, alltime = result
+
+            new_week = max(week - amount, 0)
+            new_alltime = max(alltime - amount, 0)
+
+            cursor.execute(
+                "UPDATE punkty SET week_points=?, alltime_points=? WHERE user_id=?",
+                (new_week, new_alltime, user_id)
+            )
+
+            conn.commit()
+
+            await interaction.response.send_message(
+                f"✅ Removed **{amount} points** from {member.mention}.",
+                ephemeral=True
+            )
+
+        # CURRENCY
+        elif target == "currency":
+
+            cursor.execute("SELECT doorcal FROM punkty WHERE user_id=?", (user_id,))
+            result = cursor.fetchone()
+
+            if not result:
+                await interaction.response.send_message("❌ User has no Doorcal.", ephemeral=True)
+                return
+
             current = result[0]
             new_amount = max(current - amount, 0)
-            cursor.execute("UPDATE punkty SET doorcal = ? WHERE user_id = ?", (new_amount, member.id))
+
+            cursor.execute(
+                "UPDATE punkty SET doorcal=? WHERE user_id=?",
+                (new_amount, user_id)
+            )
+
             conn.commit()
-            await interaction.response.send_message(f"✅ Usunięto {amount} Doorcal użytkownikowi {member.mention}.", ephemeral=True)
+
+            await interaction.response.send_message(
+                f"✅ Removed **{amount} Doorcal** from {member.mention}.",
+                ephemeral=True
+            )
+
+        # ITEM
+        elif target == "item":
+
+            if not item_key:
+                await interaction.response.send_message("❌ Provide item_key.", ephemeral=True)
+                return
+
+            cursor.execute("SELECT items FROM punkty WHERE user_id=?", (user_id,))
+            result = cursor.fetchone()
+
+            items = json.loads(result[0]) if result and result[0] else {}
+
+            if items.get(item_key, 0) < amount:
+                await interaction.response.send_message("❌ User does not have enough items.", ephemeral=True)
+                return
+
+            items[item_key] -= amount
+
+            if items[item_key] <= 0:
+                del items[item_key]
+
+            cursor.execute(
+                "UPDATE punkty SET items=? WHERE user_id=?",
+                (json.dumps(items), user_id)
+            )
+
+            conn.commit()
+
+            await interaction.response.send_message(
+                f"✅ Removed **{amount} x {item_key}** from {member.mention}.",
+                ephemeral=True
+            )
+
         else:
-            await interaction.response.send_message(f"❌ Użytkownik {member.mention} nie ma Doorcal.", ephemeral=True)
+            await interaction.response.send_message("❌ Invalid target type.", ephemeral=True)
+            
+ @take.autocomplete("item_key")
+async def item_autocomplete_take(interaction: discord.Interaction, current: str):
 
-# --- Komenda /pokaz_walute ---
-@bot.tree.command(name="pokaz_walute", description="Pokaż ilość Doorcal wybranego użytkownika", guild=discord.Object(id=1478885390407434455))
+    choices = [
+        app_commands.Choice(name=item['name'], value=key)
+        for key, item in items_data.items()
+        if current.lower() in key.lower()
+    ]
+
+    return choices[:25]
+ 
+# --- Komenda /remove_record ---
+@bot.tree.command(name="remove_record", description="Remove all user data from the database", guild=discord.Object(id=1478885390407434455))
 @app_commands.checks.has_role("Administrator")
-async def pokaz_walute(interaction: discord.Interaction, member: discord.Member):
+async def remove_record(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
-        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (member.id,))
-        result = cursor.fetchone()
-        amount = result[0] if result else 0
+        cursor.execute("DELETE FROM punkty WHERE user_id = ?", (member.id,))
+        conn.commit()
+    await interaction.response.send_message(f"🗑 {member.mention}'s data has been removed from the database.", ephemeral=True)
 
-    await interaction.response.send_message(
-        f"{member.mention} ma **{amount} Doorcal**.", 
-        ephemeral=True)
-
-@bot.tree.command(name="waluta", description="Sprawdź ilość waluty", guild=discord.Object(id=1478885390407434455))
-async def waluta(interaction: discord.Interaction):
-    if interaction.channel.name != CHANNEL_NAMEX:
-        await interaction.response.send_message("❌ Ta komenda działa tylko w kanale gry.", ephemeral=True)
-        return
-
-    user_id = interaction.user.id
+# --- Komenda /points_reset ---
+@bot.tree.command(name="points_reset", description="Reset weekly points from all users", guild=discord.Object(id=1478885390407434455))
+@app_commands.checks.has_role("Administrator")
+async def points_reset(interaction: discord.Interaction):
     async with db_lock:
-        cursor.execute("SELECT doorcal FROM punkty WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
+        cursor.execute("UPDATE punkty SET week_points = 0")
+        conn.commit()
+    await interaction.response.send_message("♻️ Weekly points from all users have been reset")
+
+# ------------------------------------------------------------------------ round_stop / round_start ---------------------------------------------------------------------------------------------------------------
+class GameRounds:
+    def __init__(self):
+        self.stopped = False
+        self.stop_msg = None
+
+    async def stop(self, channel):
+        self.stopped = True
+        if channel:
+            self.stop_msg = await channel.send(
+                "⏹ The current round has been stopped. Subsequent rounds will not start"
+            )
+
+    async def resume(self, channel):
+        if self.stopped and self.stop_msg:
+            self.stopped = False
+            try:
+                await self.stop_msg.delete()
+            except discord.NotFound:
+                pass
+            self.stop_msg = None
+            if channel:
+                await channel.send(
+                    "▶️ The round has been resumed. Wait for the new round message",
+                    delete_after=299
+                )
+            return True
+        return False
+
+# --- Inicjalizacja obiektu ---
+game_rounds = GameRounds()
+
+# --- Komendy administracyjne ---
+@bot.tree.command(name="round_stop", description="Stop the current and upcoming game rounds", guild=discord.Object(id=1478885390407434455))
+@app_commands.checks.has_role("Administrator")
+async def round_stop(interaction: discord.Interaction):
+    channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
+    await game_rounds.stop(channel)
+
+@bot.tree.command(name="round_start", description="Resume the game", guild=discord.Object(id=1478885390407434455))
+@app_commands.checks.has_role("Administrator")
+async def round_start(interaction: discord.Interaction):
+    channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
+    resumed = await game_rounds.resume(channel)
+    if not resumed:
+        await interaction.response.send_message("❌ The game is already running.", ephemeral=True)
         
-    doorcal = result[0] if result else 0
-    await interaction.response.send_message(f"{interaction.user.mention}, masz **{doorcal} Doorcal**", ephemeral=True)
+# --- Command /shop ---
+@bot.tree.command(name="shop", description="Show available items in the shop", guild=discord.Object(id=1478885390407434455))
+@app_commands.checks.has_role("Administrator")
+async def shop(interaction: discord.Interaction):
 
-# --- Komenda handel z różnymi ilościami ---
+    msg = "🛒 **LUCKY DOORS SHOP**\n\n"
+    for key, item in items_data.items():
+        msg += f"**{item['name']}** — {item['price']} pts\n{item['description']}\n\n"
+
+    await interaction.response.send_message(msg)
+  
+# ------------------------------------------------------------------------------------------------ Trade Command ------------------------------------------------------------------------
 
 
-@bot.tree.command(name="handel", description="Wystaw ofertę handlu", guild=discord.Object(id=1478885390407434455))
+@bot.tree.command(name="trade", description="Create a trade offer", guild=discord.Object(id=1478885390407434455))
 @app_commands.describe(
-    have="Co oferujesz",
-    have_amount="Ile jednostek oferujesz",
-    want="Co chcesz otrzymać",
-    want_amount="Ile jednostek chcesz otrzymać"
+    have="What you offer",
+    have_amount="How many units you offer",
+    want="What you want",
+    want_amount="How many units you want"
 )
-async def handel(interaction: discord.Interaction, have: str, have_amount: int, want: str, want_amount: int):
-    if interaction.channel.name != HANDEL_CHANNEL:
-        await interaction.response.send_message(f"❌ Ta komenda działa tylko w kanale {HANDEL_CHANNEL}", ephemeral=True)
+async def trade(interaction: discord.Interaction, have: str, have_amount: int, want: str, want_amount: int):
+
+    if interaction.channel.name != TRADE_CHANNEL:
+        await interaction.response.send_message(
+            f"❌ This command works only in {TRADE_CHANNEL}",
+            ephemeral=True
+        )
         return
 
     if have_amount <= 0 or want_amount <= 0:
-        await interaction.response.send_message("❌ Ilości muszą być większe od 0!", ephemeral=True)
+        await interaction.response.send_message(
+            "❌ Amounts must be greater than 0!",
+            ephemeral=True
+        )
         return
 
     user_id = interaction.user.id
 
-    # --- Sprawdzenie czy przedmioty istnieją ---
+    # --- Check if items exist ---
     if have.lower() != "doorcal" and have not in items_data:
-        await interaction.response.send_message(f"❌ Niepoprawny przedmiot `{have}`!", ephemeral=True)
+        await interaction.response.send_message(
+            f"❌ Invalid item `{have}`!",
+            ephemeral=True
+        )
         return
+
     if want.lower() != "doorcal" and want not in items_data:
-        await interaction.response.send_message(f"❌ Niepoprawny przedmiot `{want}`!", ephemeral=True)
+        await interaction.response.send_message(
+            f"❌ Invalid item `{want}`!",
+            ephemeral=True
+        )
         return
 
     async with db_lock:
@@ -724,111 +833,231 @@ async def handel(interaction: discord.Interaction, have: str, have_amount: int, 
 
     items = json.loads(result[0]) if result and result[0] else {}
     doorcal = result[1] if result else 0
+    def take(item_dict, key, amount):
+        item_dict[key] = item_dict.get(key, 0) - amount
+        if item_dict[key] <= 0:
+            del item_dict[key]
 
-    # --- Sprawdzenie czy użytkownik ma tyle, ile oferuje ---
+    # --- Check if user owns offered items ---
     if have.lower() == "doorcal":
         if doorcal < have_amount:
-            await interaction.response.send_message("❌ Nie masz tyle Doorcal!", ephemeral=True)
+            await interaction.response.send_message("❌ You don't have enough Doorcal!", ephemeral=True)
             return
     else:
         if items.get(have, 0) < have_amount:
-            await interaction.response.send_message(f"❌ Nie masz {have_amount} x {have}", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ You don't have {have_amount} x {items_data[have]['name']}",
+                ephemeral=True
+            )
             return
+            
+    async with db_lock:
+        if have == "doorcal":
+            doorcal -= have_amount
+        else:
+            take(items, have, have_amount)
+        cursor.execute(
+            "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+            (json.dumps(items), doorcal, user_id)
+        )
+        conn.commit()
+        
+    # names for display
+    have_name = items_data[have]['name'] if have != "doorcal" else "Doorcal"
+    want_name = items_data[want]['name'] if want != "doorcal" else "Doorcal"
 
-    # --- Widok handlu ---
+    # --- Trade View ---
     class TradeView(View):
         def __init__(self):
-            super().__init__(timeout=None)
+            super().__init__(timeout=600)  # 10 minutes
+            self.finished = False
+        async def on_timeout(self):
+            if self.finished:
+                return
 
-        @discord.ui.button(label="Akceptuj", style=discord.ButtonStyle.green)
+            self.finished = True
+
+            for child in self.children:
+                child.disabled = True
+
+            try:
+                await self.message.edit(
+                    content=self.message.content + "\n⌛ Trade offer expired.",
+                    view=self
+                )
+                async with db_lock:
+
+                    cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
+                    result = cursor.fetchone()
+
+                    items_o = json.loads(result[0]) if result and result[0] else {}
+                    doorcal_o = result[1] if result else 0
+
+                    if have == "doorcal":
+                        doorcal_o += have_amount
+                    else:
+                        items_o[have] = items_o.get(have, 0) + have_amount
+
+                    cursor.execute(
+                        "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                        (json.dumps(items_o), doorcal_o, user_id)
+                    )
+
+                    conn.commit()
+            except Exception:
+                pass
+                
+        @discord.ui.button(label="Accept", style=discord.ButtonStyle.green)
         async def accept(self, interaction_btn: discord.Interaction, button: Button):
+
+            if self.finished:
+                await interaction_btn.response.send_message("❌ This trade is already finished.", ephemeral=True)
+                return
+
             if interaction_btn.user.id == user_id:
-                await interaction_btn.response.send_message("❌ Nie możesz zaakceptować własnej oferty!", ephemeral=True)
+                await interaction_btn.response.send_message("❌ You cannot accept your own offer!", ephemeral=True)
                 return
 
             async with db_lock:
-                # dane akceptora
+
+                # accepter data
                 cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (interaction_btn.user.id,))
                 result_a = cursor.fetchone()
+
                 items_a = json.loads(result_a[0]) if result_a and result_a[0] else {}
                 doorcal_a = result_a[1] if result_a else 0
 
-                # sprawdzenie czy akceptor ma wymagane
+                # check accepter resources
                 if want.lower() == "doorcal":
                     if doorcal_a < want_amount:
-                        await interaction_btn.response.send_message("❌ Nie masz tyle Doorcal!", ephemeral=True)
+                        await interaction_btn.response.send_message("❌ You don't have enough Doorcal!", ephemeral=True)
                         return
                 else:
                     if items_a.get(want, 0) < want_amount:
-                        await interaction_btn.response.send_message(f"❌ Nie masz {want_amount} x {want}", ephemeral=True)
+                        await interaction_btn.response.send_message(
+                            f"❌ You don't have {want_amount} x {want_name}",
+                            ephemeral=True
+                        )
                         return
 
-                # dane oferenta
+                # offerer data
                 cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
                 result_o = cursor.fetchone()
+
                 items_o = json.loads(result_o[0]) if result_o and result_o[0] else {}
                 doorcal_o = result_o[1] if result_o else 0
 
-                # --- Funkcja bezpiecznego odejmowania przedmiotów ---
+                # safe item removal
                 def take(item_dict, key, amount):
                     item_dict[key] = item_dict.get(key, 0) - amount
                     if item_dict[key] <= 0:
                         del item_dict[key]
 
-                # oferent oddaje
-                if have.lower() == "doorcal":
-                    doorcal_o -= have_amount
-                else:
-                    take(items_o, have, have_amount)
-
-                # akceptor oddaje
+                # accepter gives
                 if want.lower() == "doorcal":
                     doorcal_a -= want_amount
                 else:
                     take(items_a, want, want_amount)
 
-                # oferent dostaje
+                # offerer receives
                 if want.lower() == "doorcal":
                     doorcal_o += want_amount
                 else:
                     items_o[want] = items_o.get(want, 0) + want_amount
 
-                # akceptor dostaje
+                # accepter receives
                 if have.lower() == "doorcal":
                     doorcal_a += have_amount
                 else:
                     items_a[have] = items_a.get(have, 0) + have_amount
 
-                # zapis do bazy
-                cursor.execute("UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
-                               (json.dumps(items_o), doorcal_o, user_id))
-                cursor.execute("UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
-                               (json.dumps(items_a), doorcal_a, interaction_btn.user.id))
+                # save to database
+                cursor.execute(
+                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    (json.dumps(items_o), doorcal_o, user_id)
+                )
+
+                cursor.execute(
+                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    (json.dumps(items_a), doorcal_a, interaction_btn.user.id)
+                )
+
                 conn.commit()
 
+            self.finished = True
+
             await interaction_btn.message.edit(
-                content=f"✅ {interaction.user.mention} wymienił się z {interaction_btn.user.mention}",
+                content=f"✅ {interaction.user.mention} traded with {interaction_btn.user.mention}",
                 view=None
             )
-            await interaction_btn.response.send_message("✅ Handel zakończony!", ephemeral=True)
+
+            await interaction_btn.response.send_message("✅ Trade completed!", ephemeral=True)
+
+        @discord.ui.button(label="Cancel Offer", style=discord.ButtonStyle.red)
+        async def cancel(self, interaction_btn: discord.Interaction, button: Button):
+
+            if interaction_btn.user.id != user_id:
+                await interaction_btn.response.send_message(
+                    "❌ Only the creator of the trade can cancel it.",
+                    ephemeral=True
+                )
+                return
+
+            if self.finished:
+                await interaction_btn.response.send_message(
+                    "❌ This trade is already finished.",
+                    ephemeral=True
+                )
+                return
+
+            self.finished = True
+
+            await interaction_btn.message.edit(
+                content=f"❌ Trade offer cancelled by {interaction.user.mention}.",
+                view=None
+            )
+
+            await interaction_btn.response.send_message("Trade cancelled.", ephemeral=True)
+            async with db_lock:
+
+                cursor.execute("SELECT items, doorcal FROM punkty WHERE user_id=?", (user_id,))
+                result = cursor.fetchone()
+
+                items_o = json.loads(result[0]) if result and result[0] else {}
+                doorcal_o = result[1] if result else 0
+
+                if have == "doorcal":
+                    doorcal_o += have_amount
+                else:
+                    items_o[have] = items_o.get(have, 0) + have_amount
+
+                cursor.execute(
+                    "UPDATE punkty SET items=?, doorcal=? WHERE user_id=?",
+                    (json.dumps(items_o), doorcal_o, user_id)
+                )
+
+                conn.commit()
 
     view = TradeView()
+
     msg = await interaction.channel.send(
-        f"💱 **OFERTA HANDLU**\n"
-        f"{interaction.user.mention} oferuje **{have_amount} x {have}**\n"
-        f"w zamian za **{want_amount} x {want}**",
+        f"💱 **TRADE OFFER**\n"
+        f"{interaction.user.mention} offers **{have_amount} x {have_name}**\n"
+        f"in exchange for **{want_amount} x {want_name}**",
         view=view
     )
 
+    view.message = msg
+    
     oferty[msg.id] = {
-        "oferent": user_id,
+        "offerer": user_id,
         "have": have,
         "have_amount": have_amount,
         "want": want,
         "want_amount": want_amount
     }
 
-    await interaction.response.send_message("✅ Oferta została wystawiona!", ephemeral=True)
+    await interaction.response.send_message("✅ Trade offer created!", ephemeral=True)
 
 # --- Autocomplete ---
 @handel.autocomplete("have")
@@ -847,41 +1076,42 @@ async def want_autocomplete(interaction: discord.Interaction, current: str):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
     return choices[:25]
 
-@bot.tree.command(name="backup", description="Ręczny backup bazy danych", guild=discord.Object(id=1478885390407434455))
+@bot.tree.command(name="backup", description="Manual database backup", guild=discord.Object(id=1478885390407434455))
 async def backup(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Tylko admin może zrobić backup.", ephemeral=True)
+        await interaction.response.send_message("❌ Only admins can create a backup.", ephemeral=True)
         return
 
-    await interaction.response.send_message("💾 Tworzę backup...", ephemeral=True)
+    await interaction.response.send_message("💾 Creating backup...", ephemeral=True)
 
     async with db_lock:
-        conn.commit()        # zapis lokalnych zmian
-        result = await asyncio.to_thread(upload_db)  # upload bez blokowania event loop
+        conn.commit()                      # zapis wszystkich transakcji
+        conn.execute("PRAGMA wal_checkpoint(FULL)")  # scalenie WAL → DB
+        result = await asyncio.to_thread(upload_db)
 
     if result:
-        await interaction.followup.send("✅ Backup zapisany na GitHub!", ephemeral=True)
+        await interaction.followup.send("✅ Backup saved to GitHub!", ephemeral=True)
     else:
-        await interaction.followup.send("❌ Backup NIE powiódł się. Sprawdź logi!", ephemeral=True)
-        
+        await interaction.followup.send("❌ Backup FAILED. Check the logs!", ephemeral=True)
+
+
 @bot.tree.command(
-    name="download_backup", 
-    description="Pobierz najnowszy backup bazy danych z GitHub", 
+    name="download_backup",
+    description="Download the latest database backup from GitHub",
     guild=discord.Object(id=1478885390407434455)
 )
 @app_commands.checks.has_role("Administrator")
 async def download_backup(interaction: discord.Interaction):
-    await interaction.response.send_message("⬇️ Pobieram backup z GitHub...", ephemeral=True)
+    await interaction.response.send_message("⬇️ Downloading backup from GitHub...", ephemeral=True)
     try:
-        # Pobranie backupu w osobnym wątku, żeby nie blokować event loop
+        # Download backup in a separate thread to avoid blocking the event loop
         result = await asyncio.to_thread(download_db)
-        await interaction.followup.send("✅ Backup pobrany i zapisany lokalnie!", ephemeral=True)
+        await interaction.followup.send("✅ Backup downloaded and saved locally!", ephemeral=True)
     except Exception as e:
-        logging.error(f"❌ Błąd przy pobieraniu backupu: {e}")
-        await interaction.followup.send(f"❌ Nie udało się pobrać backupu! {e}", ephemeral=True)
+        logging.error(f"❌ Error downloading backup: {e}")
+        await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
-
 
 
 
