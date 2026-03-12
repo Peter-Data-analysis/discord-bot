@@ -555,7 +555,7 @@ async def Pouch_view(interaction: discord.Interaction, target_user: discord.Memb
     await interaction.response.send_message(msg, ephemeral=True, delete_after=20)
 
 # global variable to track used items per round
-used_items_this_round = set()  # przechowuje user_id
+used_items_this_round = set() # przechowuje user_id
 
 @bot.tree.command(name="use", description="Use an item", guild=discord.Object(id=1478885390407434455))
 @app_commands.describe(item_name="Name of the item to use")
@@ -584,43 +584,69 @@ async def use(interaction: discord.Interaction, item_name: str):
             await interaction.response.send_message("❌ You don't have this item.", ephemeral=True)
             return
 
-        # Shield – pasywny
-        if item_name == "shield":
+        # --- Shield – pasywny ---
+        if item_name.lower() == "shield":
             await interaction.response.send_message(
                 "🛡 Shield is passive and will protect you automatically from trap doors.", ephemeral=True
             )
 
-        # Golden Key – pasywny przy /use
-        elif item_name == "golden_key":
+        # --- Golden Key – pasywny przy /use ---
+        elif item_name.lower() == "golden_key":
             await interaction.response.send_message(
                 "🗝 Golden Key is used automatically when opening a golden chest with /open golden_chest.", ephemeral=True
             )
 
-        # Normal use items
-        elif item_name in ["eavesdrop", "prophecy"]:
-            user_items[item_name] -= 1
-            if user_items[item_name] <= 0:
-                del user_items[item_name]
+        # --- Prophecy ---
+        elif item_name.lower() == "prophecy":
+            # wybieramy 2 drzwi które nie są niczym
+            possible_doors = [d for d in range(1, 6)
+                              if d != correct_door
+                              and d != trap_door
+                              and (chest_door is None or d != chest_door)]
+            if not possible_doors:
+                await interaction.response.send_message(
+                    "Nothing to reveal... all doors have something!", ephemeral=True
+                )
+                return
+            empty_doors = random.sample(possible_doors, min(2, len(possible_doors)))
 
+            # odejmujemy item z ekwipunku
+            user_items[item_name.lower()] -= 1
+            if user_items[item_name.lower()] <= 0:
+                del user_items[item_name.lower()]
             cursor.execute("UPDATE pouch SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
             conn.commit()
 
-            if item_name == "eavesdrop":
-                await interaction.response.send_message(
-                    "👂 Eavesdrop used! Check if you chose the correct door soon!", ephemeral=True
-                )
-            elif item_name == "prophecy":
-                await interaction.response.send_message(
-                    "🔮 Prophecy used! 2 wrong doors will be removed at the start of the round.", ephemeral=True
-                )
+            await interaction.response.send_message(
+                f"🔮 Prophecy reveals: doors {empty_doors[0]} and {empty_doors[1]} are empty.", ephemeral=True
+            )
 
+        # --- Eavesdrop ---
+        elif item_name.lower() == "eavesdrop":
+            if correct_door is None:
+                await interaction.response.send_message(
+                    "Round hasn't started yet!", ephemeral=True
+                )
+                return
+
+            # odejmujemy item z ekwipunku
+            user_items[item_name.lower()] -= 1
+            if user_items[item_name.lower()] <= 0:
+                del user_items[item_name.lower()]
+            cursor.execute("UPDATE pouch SET items=? WHERE user_id=?", (json.dumps(user_items), user_id))
+            conn.commit()
+
+            await interaction.response.send_message(
+                f"👂 Eavesdrop reveals: the correct door is {correct_door}.", ephemeral=True
+            )
+
+        # --- nieznany item ---
         else:
             await interaction.response.send_message("❌ Unknown item.", ephemeral=True)
             return
 
         # mark user as having used an item this round
         used_items_this_round.add(user_id)
-
 # ------------------------------------------------------------------------------------------------- admin commands -------------------------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------------------------- Komenda /top  -------------------------------------------------------------------------------------------------
@@ -1265,6 +1291,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
