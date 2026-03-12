@@ -1055,7 +1055,7 @@ async def trade(interaction: discord.Interaction, have: str, have_amount: int, w
     await interaction.response.send_message("✅ Trade offer created!", ephemeral=True)
 
 # --- Autocomplete ---
-@handel.autocomplete("have")
+@trade.autocomplete("have")
 async def have_autocomplete(interaction: discord.Interaction, current: str):
     choices = [app_commands.Choice(name=item['name'], value=key)
                for key, item in items_data.items() if current.lower() in key.lower()]
@@ -1063,7 +1063,7 @@ async def have_autocomplete(interaction: discord.Interaction, current: str):
         choices.insert(0, app_commands.Choice(name="Doorcal", value="doorcal"))
     return choices[:25]  # <-- po prostu zwracasz listę, nie robisz żadnego send
 
-@handel.autocomplete("want")
+@trade.autocomplete("want")
 async def want_autocomplete(interaction: discord.Interaction, current: str):
     choices = [app_commands.Choice(name=item['name'], value=key)
                for key, item in items_data.items() if current.lower() in key.lower()]
@@ -1107,6 +1107,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
