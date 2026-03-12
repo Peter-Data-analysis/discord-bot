@@ -11,6 +11,7 @@ import logging
 import asyncio
 import json
 import atexit
+from time import sleep
 from datetime import datetime, timezone, time
 from zoneinfo import ZoneInfo
 from discord import app_commands
@@ -32,6 +33,11 @@ stop_round = False
 items_data = {}
 listings = {}
 
+MODERATOR_ROLES = ["Administrator", "Moderator", "Mod"]
+def has_moderator_role():
+    async def predicate(interaction: discord.Interaction) -> bool:
+        return any(role.name in MODERATOR_ROLES for role in interaction.user.roles)
+    return app_commands.check(predicate)
 # --- Database backup function on Github ---
 def download_db():
     url = f"https://api.github.com/repos/Paither/discord-bot-backup/contents/luckydoors.db"
@@ -80,7 +86,7 @@ def upload_db(max_retries: int = 3, delay: float = 2.0):
         except Exception as e:
             logging.warning(f"⚠ Attempt {attempt}: exception during upload: {e}")
 
-        time.sleep(delay)
+        sleep(delay)
 
     logging.error("❌ Failed to upload database after several attempts")
     return False
@@ -465,7 +471,7 @@ async def Pouch_view(interaction: discord.Interaction, target_user: discord.Memb
    
 # --- Komenda /top ---
 @bot.tree.command(name="top", description="Pokaż TOP 20 graczy all-time", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def top(interaction: discord.Interaction):
     async with db_lock:
         cursor.execute("SELECT user_id, alltime_points FROM punkty ORDER BY alltime_points DESC LIMIT 20")
@@ -487,7 +493,7 @@ async def top(interaction: discord.Interaction):
 
 # ------------------------------------------------------------------------------------------------------ give ------------------------------------------------------------------------------------------------------
 @bot.tree.command(name="give", description="Give currency, points or item to user", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 @app_commands.describe(
     target="points / currency / item",
     member="Target user",
@@ -593,7 +599,7 @@ async def item_autocomplete(interaction: discord.Interaction, current: str):
     return choices[:25]
 # ------------------------------------------------------------------------------------------------------ take ------------------------------------------------------------------------------------------------------
 @bot.tree.command(name="take", description="Remove currency, points or item from user", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def take(interaction: discord.Interaction, target: str, member: discord.Member, amount: int, item_key: str = None):
 
     if amount <= 0:
@@ -705,7 +711,7 @@ async def item_autocomplete_take(interaction: discord.Interaction, current: str)
  
 # --- Komenda /remove_record ---
 @bot.tree.command(name="remove_record", description="Remove all user data from the database", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def remove_record(interaction: discord.Interaction, member: discord.Member):
     async with db_lock:
         cursor.execute("DELETE FROM punkty WHERE user_id = ?", (member.id,))
@@ -714,7 +720,7 @@ async def remove_record(interaction: discord.Interaction, member: discord.Member
 
 # --- Komenda /points_reset ---
 @bot.tree.command(name="points_reset", description="Reset weekly points from all users", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def points_reset(interaction: discord.Interaction):
     async with db_lock:
         cursor.execute("UPDATE punkty SET week_points = 0")
@@ -755,13 +761,13 @@ game_rounds = GameRounds()
 
 # --- Komendy administracyjne ---
 @bot.tree.command(name="round_stop", description="Stop the current and upcoming game rounds", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def round_stop(interaction: discord.Interaction):
     channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
     await game_rounds.stop(channel)
 
 @bot.tree.command(name="round_start", description="Resume the game", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def round_start(interaction: discord.Interaction):
     channel = discord.utils.get(interaction.guild.text_channels, name=CHANNEL_NAME)
     resumed = await game_rounds.resume(channel)
@@ -770,7 +776,7 @@ async def round_start(interaction: discord.Interaction):
         
 # --- Command /shop ---
 @bot.tree.command(name="shop", description="Show available items in the shop", guild=discord.Object(id=1478885390407434455))
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def shop(interaction: discord.Interaction):
 
     msg = "🛒 **LUCKY DOORS SHOP**\n\n"
@@ -1095,7 +1101,7 @@ async def backup(interaction: discord.Interaction):
     description="Download the latest database backup from GitHub",
     guild=discord.Object(id=1478885390407434455)
 )
-@app_commands.checks.has_role("Administrator")
+@has_moderator_role()
 async def download_backup(interaction: discord.Interaction):
     await interaction.response.send_message("⬇️ Downloading backup from GitHub...", ephemeral=True)
     try:
@@ -1107,6 +1113,7 @@ async def download_backup(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Failed to download backup! {e}", ephemeral=True)
 
 bot.run(TOKEN)
+
 
 
 
