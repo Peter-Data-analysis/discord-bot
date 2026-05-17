@@ -276,9 +276,9 @@ async def auto_backup():
 # --- rounds loop ---
 @tasks.loop(minutes=5)
 async def round():
-    chest_chance = 0.1
-    chest_door = None
-    chest_winner = None
+    _chance = 0.1
+    _door = None
+    _winner = None
     global correct_door, choices, trap_door
     global trap_round
     global bonus_round
@@ -604,6 +604,7 @@ async def use(interaction: discord.Interaction, item_name: str):
 
         # --- Prophecy ---
         elif item_name.lower() == "prophecy":
+            chest_door = locals().get("chest_door", None)
             # wybieramy 2 drzwi które nie są niczym
             possible_doors = [d for d in range(1, 6)
                               if d != correct_door
