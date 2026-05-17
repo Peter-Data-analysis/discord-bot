@@ -124,6 +124,9 @@ load_items()
 
 correct_door = None
 trap_door = None
+chest_door = None
+chest_winner = None
+
 choices = {}
 bonus_round = False
 trap_round = False
@@ -273,6 +276,60 @@ async def auto_backup():
         upload_db()
         logging.info("💾 Automatic backup executed")
 
+class ChestButton(View):
+    def __init__(self, winner_id):
+        super().__init__(timeout=None)  # timeout niepotrzebny, bo wiadomość znika
+        self.winner_id = winner_id
+
+    @discord.ui.button(label="Open Chest", style=discord.ButtonStyle.green)
+    async def open(self, interaction: discord.Interaction, button: Button):
+
+        # 1. Sprawdź, czy klikający to zwycięzca skrzyni
+        if interaction.user.id != self.winner_id:
+            await interaction.response.send_message(
+                "❌ This chest is not for you.",
+                ephemeral=True
+            )
+            return
+
+        user_id = interaction.user.id
+
+        # 2. Pobierz ekwipunek
+        async with db_lock:
+            cursor.execute("SELECT items FROM pouch WHERE user_id=?", (user_id,))
+            result = cursor.fetchone()
+
+        user_items = json.loads(result[0]) if result and result[0] else {}
+
+        # 3. Sprawdź Golden Key
+        if user_items.get("golden_key", 0) <= 0:
+            await interaction.response.send_message(
+                "❌ You don't have a Golden Key!",
+                ephemeral=True
+            )
+            return
+
+        # 4. Odejmij klucz
+        user_items["golden_key"] -= 1
+        if user_items["golden_key"] <= 0:
+            del user_items["golden_key"]
+
+        # 5. Wylosuj nagrodę (Doorcal 40–80)
+        reward = random.randint(40, 80)
+
+        async with db_lock:
+            cursor.execute(
+                "UPDATE pouch SET items=?, doorcal = doorcal + ? WHERE user_id=?",
+                (json.dumps(user_items), reward, user_id)
+            )
+            conn.commit()
+
+        # 6. Wyślij nagrodę
+        await interaction.response.send_message(
+            f"🎉 You opened the chest and gained **+{reward} Doorcal**!",
+            ephemeral=True
+        )
+
 # --- rounds loop ---
 @tasks.loop(minutes=5)
 async def round():
@@ -372,7 +429,24 @@ async def round():
                         outcome += f"{user_mention} — ❌ only silence...\n"
             conn.commit()
         await channel.send(outcome, delete_after=60)
+        # --- Determine chest winner ---
+    if chest_door is not None:
+        # znajdź wszystkich graczy, którzy wybrali drzwi ze skrzynią
+        chest_candidates = [uid for uid, door in choices.items() if door == chest_door]
 
+        if chest_candidates:
+            # wybierz jednego zwycięzcę
+            chest_winner = random.choice(chest_candidates)
+
+            member = channel.guild.get_member(chest_winner)
+            mention = member.mention if member else f"<@{chest_winner}>"
+
+            # wyślij wiadomość z przyciskiem
+            await channel.send(
+                f"🎁 {mention}, you found a **chest**! You need a **Golden Key** to open it.",
+                view=ChestButton(chest_winner),
+                delete_after=120
+            )
     # --- round draw ---
     jackpot_round = random.random() < 0.01
     bonus_round = False
