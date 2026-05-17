@@ -279,7 +279,8 @@ async def round():
     _chance = 0.1
     _door = None
     _winner = None
-    global correct_door, choices, trap_door
+    global correct_door, choices, trap_door, chest_door, chest_winner
+    global chest_chance
     global trap_round
     global bonus_round
     global jackpot_round
